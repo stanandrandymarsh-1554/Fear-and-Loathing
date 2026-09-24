@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Fear &amp; Loathing</title>
+<link rel="stylesheet" href="css/ui.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<!-- ============ HUD ============ -->
+<div id="hud" class="hidden">
+
+  <div id="reticle"><span></span></div>
+  <div id="objective" class="hidden"><i></i><b></b></div>
+
+  <div id="meters">
+    <div class="meter" data-k="fear">
+      <label>FEAR</label>
+      <div class="bar"><i></i></div>
+    </div>
+    <div class="meter" data-k="loathing">
+      <label>LOATHING</label>
+      <div class="bar"><i></i></div>
+    </div>
+  </div>
+
+  <div id="stats">
+    <div class="stat" data-k="nerve"><label>NERVE</label><div class="pips"></div></div>
+    <div class="stat" data-k="perception"><label>PERCEPTION</label><div class="pips"></div></div>
+    <div class="stat" data-k="composure"><label>COMPOSURE</label><div class="pips"></div></div>
+    <div class="stat" data-k="motor"><label>MOTOR</label><div class="pips"></div></div>
+  </div>
+
+  <div id="wallet"><span class="amt">$200</span></div>
+  <div id="inventory"></div>
+
+  <div id="tasks">
+    <div class="tasks-title">THE ITINERARY</div>
+    <ul></ul>
+  </div>
+
+  <div id="prompt" class="hidden"></div>
+  <div id="subtitle" class="hidden"></div>
+  <div id="toast-stack"></div>
+</div>
+
+<!-- ============ DIALOGUE ============ -->
+<div id="dialogue" class="hidden">
+  <div class="dlg-frame">
+    <div class="dlg-who"></div>
+    <div class="dlg-line"></div>
+    <div class="dlg-timer"><i></i></div>
+    <ol class="dlg-options"></ol>
+    <div class="dlg-hint">press <b>1</b>–<b>4</b></div>
+  </div>
+</div>
+
+<!-- ============ TITLE ============ -->
+<div id="title">
+  <div class="title-inner">
+    <h1><span>FEAR</span><em>&amp;</em><span>LOATHING</span></h1>
+    <h2>a savage journey to the heart of the deal</h2>
+    <p class="quote">There is no honest way to explain the itinerary, because
+      the man who wrote it down was not in any condition to be writing things down.</p>
+
+    <div class="brief">
+      <p>You have a list of errands and a head full of bad chemistry.
+         Sober, you are too afraid to speak to anyone. Loaded, you cannot
+         read your own words. Find the middle. There is no middle.</p>
+    </div>
+
+    <p class="case-note">In the case: grass, mescaline, blotter acid, cocaine,
+      a galaxy of uppers and downers, tequila, raw ether, amyls. Adrenochrome
+      is not in the case. You have to find somebody willing to sell it.</p>
+
+    <div class="chems">
+      <div class="chem" style="--c:var(--cyan)">
+        <b>ETHER &amp; DOWNERS</b>
+        <span class="buys">no fear &middot; a slower clock</span>
+        <span class="costs">take your legs, not your eyes. you keep walking
+          where you were already walking</span>
+      </div>
+      <div class="chem" style="--c:var(--violet)">
+        <b>MESCALINE &amp; ACID</b>
+        <span class="buys">perception &middot; you see what is there</span>
+        <span class="costs">and a great deal that is not. the whole light
+          show lives here</span>
+      </div>
+      <div class="chem" style="--c:var(--red)">
+        <b>COKE &middot; UPPERS &middot; AMYLS</b>
+        <span class="buys">nerve, and coke alone makes you articulate</span>
+        <span class="costs">you twitch, you cannot hold an aim, and it
+          all wears off fast</span>
+      </div>
+      <div class="chem" style="--c:var(--amber)">
+        <b>GRASS &amp; TEQUILA</b>
+        <span class="buys">the edge off, cheaply</span>
+        <span class="costs">blur, doubling, a late hand</span>
+      </div>
+    </div>
+
+    <div class="doings">
+      the floor is a floor: <b>play the slots</b> at five dollars a pull,
+      <b>buy a drink</b> at the revolving bar, and take the elevator only
+      when you are finished &mdash; there is no coming back down. After the
+      floor there is the room, after the room there is the road, and at the
+      end of the road, if you answer the telephone, four hundred district
+      attorneys.
+    </div>
+
+    <div class="controls">
+      <div><b>W A S D</b> move</div>
+      <div><b>MOUSE</b> look</div>
+      <div><b>SHIFT</b> stagger faster</div>
+      <div><b>E</b> interact &middot; play &middot; buy</div>
+      <div><b>1</b>&ndash;<b>9</b> <b>0</b> take a dose</div>
+      <div><b>1</b>&ndash;<b>4</b> answer, in conversation</div>
+      <div><b>TAB</b> itinerary</div>
+      <div><b>W</b> <b>A</b> <b>D</b> <b>S</b> drive &middot; steer &middot; brake</div>
+    </div>
+
+    <button id="start">BEGIN THE DRIVE</button>
+    <div class="warn">flashing colours, heavy motion, loud audio. headphones recommended.</div>
+  </div>
+</div>
+
+<!-- ============ END CARD ============ -->
+<div id="endcard" class="hidden">
+  <div class="end-inner">
+    <h1></h1>
+    <p class="end-body"></p>
+    <p class="end-stats"></p>
+    <button id="again">AGAIN</button>
+  </div>
+</div>
+
+<div id="flash"></div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

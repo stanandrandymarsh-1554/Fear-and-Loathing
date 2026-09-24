@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fear-and-loathing",
+      "runtimeExecutable": "ruby",
+      "runtimeArgs": [
+        "-run", "-e", "httpd",
+        "/Users/stanmarsh/Desktop/Fear & Loathing",
+        "-p", "8777"
+      ],
+      "port": 8777
+    }
+  ]
+}
