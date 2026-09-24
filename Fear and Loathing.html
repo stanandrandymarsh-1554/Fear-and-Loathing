@@ -54989,6 +54989,13 @@ class Post {
     this.mFinal.uniforms.uAspect.value = w / h;
   }
 
+  /** forget the trails: the next frame starts from nothing behind it */
+  clearHistory() {
+    this.renderer.setRenderTarget(this.rtPrev);
+    this.renderer.clear();
+    this.renderer.setRenderTarget(null);
+  }
+
   _blit(mat, target) {
     this.quad.material = mat;
     this.renderer.setRenderTarget(target);
@@ -64095,8 +64102,10 @@ function frame(now) {
 
 /* One step of the world. Separated from the rAF callback so it can be
    driven at a fixed timestep -- which is the only way to actually play
-   the game under test, rather than teleporting past it. */
-function tick(dt) {
+   the game under test, rather than teleporting past it.
+   draw=false steps the world without rendering it: a test that walks for
+   ten seconds needs the last frame, not six hundred of them. */
+function tick(dt, draw = true) {
   if (game.over) return;
   clock += dt;
 
@@ -64270,7 +64279,7 @@ function tick(dt) {
   }
 
   s2.blackout = game.blackout;   // updateFade()/winning only touch blackout after s2
-  post.render(s2, clock, dt);
+  if (draw) post.render(s2, clock, dt);
 
 }
 

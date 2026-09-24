@@ -1990,13 +1990,22 @@ function frame(now) {
   last = now;
   dt = Math.min(dt, 0.05);
   if (!started) return;
+  /* DBG-START */
+  // A harness driving the clock itself holds the loop. Under a software GL a
+  // frame costs seconds, and a free-running loop kept the main thread so busy
+  // that a screenshot waited on the compositor until it timed out.
+  if (document.documentElement.hasAttribute('data-fl-debug')
+      && document.documentElement.hasAttribute('data-fl-hold')) return;
+  /* DBG-END */
   tick(dt);
 }
 
 /* One step of the world. Separated from the rAF callback so it can be
    driven at a fixed timestep -- which is the only way to actually play
-   the game under test, rather than teleporting past it. */
-function tick(dt) {
+   the game under test, rather than teleporting past it.
+   draw=false steps the world without rendering it: a test that walks for
+   ten seconds needs the last frame, not six hundred of them. */
+function tick(dt, draw = true) {
   if (game.over) return;
   clock += dt;
 
@@ -2170,7 +2179,7 @@ function tick(dt) {
   }
 
   s2.blackout = game.blackout;   // updateFade()/winning only touch blackout after s2
-  post.render(s2, clock, dt);
+  if (draw) post.render(s2, clock, dt);
 
   /* DBG-START */
   // A dev channel over the DOM. The page's own globals are invisible to an
@@ -2191,6 +2200,9 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       car: [+car.speed.toFixed(2), +(car.wheel || 0).toFixed(3), +(car.heading || 0).toFixed(3), car.stage],
       cam: [+camera.fov.toFixed(1), +camera.rotation.z.toFixed(3), +head.yaw.toFixed(2)],
       phantom: phantom.active, bats: roadBats.points.visible,
+      // what a screenshot needs to know: is the picture mid-cut to black
+      act: game.act, over: game.over, blackout: +game.blackout.toFixed(3),
+      fading: !!fade || !!winning || game._blacking > 0,
       road: game.act === 3 ? [+latOf(car.pos.x, car.pos.z).toFixed(2), +relHeading(car.heading, car.pos.z).toFixed(3),
         +(-(car.pos.z - DESERT_Z)).toFixed(0)] : null,
       traffic: traffic.filter((V) => V.active).map((V) => Math.round(V.s + (car.pos.z - DESERT_Z))),
@@ -2242,7 +2254,9 @@ if (c.look) {
 // own frame throttling will never do for us
 if (c.steps) {
   const n = Math.min(c.steps, 4000);
-  for (let i = 0; i < n && !game.over; i++) tick(1 / 60);
+  // undrawn: rendering every step is what made a stepped walk cost
+  // minutes under a software renderer. Pictures come from c.shot.
+  for (let i = 0; i < n && !game.over; i++) tick(1 / 60, false);
 }
 if (c.press) {   // one interaction, the way E does it
   interact();
@@ -2358,6 +2372,21 @@ if (c.press) {   // one interaction, the way E does it
       if (c.probe) document.body.dataset.flProbe = JSON.stringify(world.colliders
         .map((k, i) => ({ i, ...k, d: Math.hypot(k.x - c.probe[0], k.z - c.probe[1]) - (k.r || Math.max(k.hw, k.hd)) }))
         .filter((k) => k.d < 2).slice(0, 12));
+      // The 3D frame as a PNG, without the HUD over it. Drawn and read back in
+      // the same task: once the compositor has taken the drawing buffer it is
+      // cleared, and a read-back after that comes out black. Last, so it sees
+      // whatever the rest of this command did. shot: n draws n frames, which
+      // is what the trails need to build up again; the history is cleared
+      // first, or the last frame drawn -- maybe another act -- ghosts in.
+      if (c.shot) {
+        post.clearHistory();
+        const frames = Math.max(1, Math.min(+c.shot || 1, 30));
+        for (let i = 0; i < frames; i++) {
+          if (!game.over) tick(1 / 60);
+          else { const s = game.snapshot(); s.blackout = game.blackout; post.render(s, clock, 1 / 60); }
+        }
+        document.body.dataset.flShot = canvas.toDataURL('image/png');
+      }
       } catch (err) { console.warn('dbg', err); }
     }
   }
@@ -2449,7 +2478,8 @@ requestAnimationFrame(frame);
 // timers), which freezes the dev channel with it. An event dispatched on the
 // document runs its listener synchronously, so the harness can pump one
 // fixed step itself and the command it just wrote is consumed there and then.
+// The pumped step is not drawn: pictures come from the shot command.
 document.addEventListener('fl-pump', () => {
-  if (started && document.documentElement.hasAttribute('data-fl-debug')) tick(1 / 60);
+  if (started && document.documentElement.hasAttribute('data-fl-debug')) tick(1 / 60, false);
 });
 /* DBG-END */

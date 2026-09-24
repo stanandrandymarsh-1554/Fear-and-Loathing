@@ -418,6 +418,13 @@ export class Post {
     this.mFinal.uniforms.uAspect.value = w / h;
   }
 
+  /** forget the trails: the next frame starts from nothing behind it */
+  clearHistory() {
+    this.renderer.setRenderTarget(this.rtPrev);
+    this.renderer.clear();
+    this.renderer.setRenderTarget(null);
+  }
+
   _blit(mat, target) {
     this.quad.material = mat;
     this.renderer.setRenderTarget(target);
