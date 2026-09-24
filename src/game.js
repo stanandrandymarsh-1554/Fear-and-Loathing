@@ -1123,6 +1123,8 @@ export class Game {
     this.drinksBought = 0;
     this.elevatorArmed = false;
     this.blackouts = 0;
+    this.crashes = 0;
+    this._crashing = false;
     this.over = false;
     this.won = false;
     this.act = 1;            // 1 = the casino floor, 2 = room 1850, 3 = the road, either way
@@ -1777,6 +1779,7 @@ export class Game {
       `ERRANDS COMPLETED &nbsp;${done} / ${TASK_DEFS.length}<br>`
       + `DOSES TAKEN &nbsp;${this.dosesTaken}<br>`
       + `BLACKOUTS &nbsp;${this.blackouts}<br>`
+      + (this.crashes ? `WRECKS &nbsp;${this.crashes}<br>` : '')
       + `FINAL LOATHING &nbsp;${Math.round(this.loathing * 100)}%<br>`
       + `TIME ON THE FLOOR &nbsp;${Math.floor(this.elapsed / 60)}m ${Math.floor(this.elapsed % 60)}s`;
     setTimeout(() => ec.classList.remove('hidden'), won ? 1200 : 2200);
@@ -1846,35 +1849,62 @@ export class Game {
       + 'The phone starts ringing before you have the door shut.');
   }
 
-  /* you ran off the road hard enough to end it */
+  /* You ran off the road hard enough to stop the car. It used to be the end
+     card, and the drive is the easiest place in the game to earn one, so a
+     night's work went with a single lamp post. It is a cut to black now:
+     main.js hears it through onWreck, runs the fade, and calls wakeAtBar
+     in the dark. */
   crash(kind) {
-    const town = {
-      parked: ['THE PARKING LANE',
-        'Four blocks from the hotel you find a parked station wagon at forty miles an hour. '
-        + 'Its owner comes out of a casino with a drink still in his hand, and he is only the '
-        + 'first of a great many people who are going to want a word with you.'],
-      pole: ['THE LAMP POST',
-        'It was the one thing on the whole street that was not moving, and you found it. The '
-        + 'light at the top stays on the entire time, which you take personally.'],
-      storefront: ['THE STOREFRONT',
-        'You leave the road at the one place in Nevada where there is something to hit, and '
-        + 'it is a pawnshop. The owner is very calm about it. He has seen worse. Not much worse.'],
-    }[kind];
-    if (town) { this.end(false, town[0], town[1]); return; }
-    if (kind === 'traffic') {
-      this.end(false, 'HEAD ON',
-        'It comes over the rise in its own lane, which by then was also your lane. '
-        + 'The driver will tell the highway patrol that you were smiling and waving at him '
-        + 'the whole way in, and nobody who knew you will doubt it.');
-      return;
+    if (this.over || this._crashing) return;
+    this._crashing = true;
+    this.crashes++;
+    const line = {
+      parked: 'A parked station wagon, at forty miles an hour.',
+      pole: 'The one thing on the whole street that was not moving: a lamp post.',
+      storefront: 'The one place in Nevada with something to hit, and it is a pawnshop.',
+      traffic: 'It came over the rise in its own lane, which by then was also your lane.',
+    }[kind] || 'The shoulder goes soft, then it goes away, and so does the car.';
+    this.closeDialogue();
+    this.audio.bad();
+    this.audio.blackout();
+    this.toast('WRECKED', 'bad');
+    this.say(line);
+    if (this.onWreck) this.onWreck(kind);
+    else this.end(false, 'OFF THE ROAD', line);
+  }
+
+  /* Somebody got you and the car back to the hotel, and you come to on a
+     stool at the bar. What it cost: the case -- every last thing in it --
+     and the car, which still runs but looks it. What is already in your
+     blood stays there. Where you pick up depends on which drive it was:
+       out    the outbound drive, from the front doors again
+       final  the last drive west, the same
+       return the drive back, which you have finished, after a fashion:
+              the convention is through the lounge, off the lobby */
+  wakeAtBar(leg) {
+    this._crashing = false;
+    for (const k of KEYS) { this.stock[k] = 0; this.pending[k] = 0; }
+    this.fear = 0.3;
+    this.act = 1;
+    this.leaving = true;
+    if (leg === 'out') {
+      // back to the front doors; the drive (and anything after it) is undone
+      ['drive', 'callback'].forEach((id) => {
+        const t = this.tasks.find((x) => x.id === id);
+        if (t) t.state = 'todo';
+      });
+      const t = this.tasks.find((x) => x.id === 'checkout');
+      if (t) t.state = 'active';
     }
-    this.end(false, 'OFF THE ROAD', this.finale
-      ? 'Twenty miles out of town, in broad daylight, on a straight road, with nothing '
-        + 'coming the other way. The highway patrol report will call it inattention, which '
-        + 'is one word for it. You had made it all the way out, which is the joke.'
-      : 'The shoulder goes soft, then it goes away, and the car goes over. Nobody '
-        + 'finds it for two days. The story was filed, at least, which is more than '
-        + 'anyone expected and considerably less than a life.');
+    this._renderInv();
+    this._renderTasks();
+    this.toast('THE CASE IS EMPTY', 'bad');
+    this.say('You come to on a stool at the bar with a drink you did not order. '
+      + 'Somebody brought the car back round, and it looks like it lost an argument. '
+      + 'The case is gone, every last thing in it. '
+      + (leg === 'return'
+        ? 'It is nine in the morning, and the convention is through the lounge, off the east side of the lobby.'
+        : 'The car is out front. It still runs.'), null, 8);
   }
 
   /* The end of it. In the film the call sends him straight back into the

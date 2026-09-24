@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { buildSuite, SUITE } from './suite.js';
 // (one line: build.rb rewrites imports line by line)
-import { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } from './desert.js';
+import { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } from './desert.js';
 import { buildConvention, CONV } from './convention.js';
 import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js';
 import { Post } from './post.js';
@@ -526,7 +526,9 @@ const OBJECTIVE_AT = {
     : carDoorPoint()),
   drive:     () => new THREE.Vector3(DESERT_X, 2.5, DESERT_Z + desert.end),
   callback:  () => new THREE.Vector3(DESERT_X + desert.phone.x, 1.5, DESERT_Z + desert.phone.z),
-  return:    () => new THREE.Vector3(DESERT_X, 1.5, DESERT_Z - COURT.mouth - 6),
+  // (or, after a wreck on the way back, the lounge door to the convention)
+  return:    () => (game.act === 1 ? LOUNGE_DOOR_AT
+    : new THREE.Vector3(DESERT_X, 1.5, DESERT_Z - COURT.mouth - 6)),
   badge:     () => registrar.group.position,
   seminar:   () => (seminar.seated ? null : new THREE.Vector3(CONV_X + CONV.seat.x, 1.0, CONV.seat.z)),
   georgia:   () => georgiaDA.group.position,
@@ -659,6 +661,9 @@ function interact() {
     fadeThrough(() => { audio.stopElevator(); startDownstairs(); }, 3.4);
   } else if (f.kind === 'getin') {
     getInCar();
+  } else if (f.kind === 'convention') {
+    audio.door();
+    fadeThrough(startActFour, 2.8);
 
   } else if (f.kind === 'phone') {
     game.openDialogue('phone');
@@ -853,6 +858,9 @@ function findFocus() {
   if (game.leaving) {
     consider('elevator', null, new THREE.Vector3(0, 0, 54), 5.5, 'THE ELEVATORS',
       'You are not going back up there.');
+    if (game.taskState('return') === 'active' && car.stage === null) {
+      consider('convention', null, LOUNGE_DOOR_AT, 3.2, 'THE CONVENTION WING', null, 1.2);
+    }
     if (car.stage === null && player.pos.z < world.frontage.PAVE_Z
         && (game.taskState('checkout') === 'active' || game.taskState('westward') === 'active')) {
       consider('getin', null, carDoorPoint(), 2.6, 'GET IN THE CAR', null, 1.2);
@@ -1131,6 +1139,53 @@ function startActFour() {
   player.pitch = 0;
   player.roll = 0;
 }
+
+/* A WRECK. game.crash() used to be the end card; now it hands over here.
+   The car stays where it stopped while the picture goes, and in the dark
+   everything the drive switched on is switched back off -- the same work
+   startActFour does -- and you are put on a stool at the ring bar, on the
+   side nearest the lobby. The car is back at the kerb, dented, and drives
+   exactly as it did before. */
+let wrecking = false;
+game.onWreck = () => {
+  wrecking = true;
+  audio.engine(-1);
+  fadeThrough(wakeAtBar, 5);
+};
+function wakeAtBar() {
+  const leg = car.returning ? 'return' : game.finale ? 'final' : 'out';
+  leaveCar();
+  clearTraffic();
+  const at = world.frontage.car;
+  car.stage = null; car.returning = false; car.parked = false; car.arrived = false;
+  car.final = false; car.speed = 0; car.wheel = 0; car.kick = 0; car.offRoad = 0;
+  car.pos.set(at.x, 0, at.z); car.heading = at.yaw;
+  car.damage = (car.damage || 0) + 1;
+  damageCar(desert.car, car.damage);
+  damageCar(hotelCar, car.damage);
+  placeCar();
+  hotelCar.visible = true;
+  roadBats.group.visible = false;
+  phantom.g.visible = false; phantom.active = false;
+  showCasino(true);
+  scene.fog = FOG[1];
+  camera.far = 400;
+  camera.updateProjectionMatrix();
+  audio.ambience = 'casino';
+  game.wakeAtBar(leg);
+
+  player.pos.set(0, 1.72, -(world.CAROUSEL_R + 2.1));
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = Math.PI;           // facing the counter
+  player.pitch = 0;
+  player.roll = 0;
+  zoneNow = null;
+  wrecking = false;
+}
+// the lounge door off the east side of the lobby, which is the way into the
+// convention wing -- the way you come back out of it on the last morning
+const LOUNGE_DOOR_AT = new THREE.Vector3(world.LOB_X - 0.6, 1.4, -44);
 
 /* Into the chair for the keynote. You can look around -- at the lizards,
    mostly -- but not get up without making a scene of it. */
@@ -2069,7 +2124,9 @@ function tick(dt, draw = true) {
   if (desert.group.visible) { setDaylight(daylight()); desert.update(clock); }
 
   // act three is a car, not a pair of legs -- and so is pulling away
-  if (game.act === 3 && !car.parked) {
+  if (wrecking) {
+    // the car stays where it stopped while the picture goes
+  } else if (game.act === 3 && !car.parked) {
     if (car.returning) driveBack(dt, s); else driveCar(dt, s);
   } else if (!(game.act === 3 && car.returning)) {
     // (parked back at the hotel, you stay in the seat while it fades out)
@@ -2203,6 +2260,7 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       // what a screenshot needs to know: is the picture mid-cut to black
       act: game.act, over: game.over, blackout: +game.blackout.toFixed(3),
       fading: !!fade || !!winning || game._blacking > 0,
+      crashes: game.crashes, stock: Object.values(game.stock).reduce((a, n) => a + n, 0),
       road: game.act === 3 ? [+latOf(car.pos.x, car.pos.z).toFixed(2), +relHeading(car.heading, car.pos.z).toFixed(3),
         +(-(car.pos.z - DESERT_Z)).toFixed(0)] : null,
       traffic: traffic.filter((V) => V.active).map((V) => Math.round(V.s + (car.pos.z - DESERT_Z))),

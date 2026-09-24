@@ -650,6 +650,78 @@ export function makeCar() {
   return car;
 }
 
+/* What a wreck leaves on the car, one step worse each time: a star in the
+   windscreen that spreads, a bonnet that buckles up at the front, and then
+   a headlight out. Only ever added -- the car is batched at load, so its
+   own parts cannot be bent -- and it drives exactly as it did. */
+export function damageCar(car, level) {
+  let d = car.userData.damage;
+  if (!d) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 128;
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // just inside the glass, so it sits over the pane from the driver's seat
+    const crack = new THREE.Mesh(new THREE.PlaneGeometry(1.78, 0.44),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false,
+                                    side: THREE.DoubleSide, fog: false }));
+    crack.position.set(0, 1.22, -0.83);
+    crack.rotation.x = 0.35;
+    crack.renderOrder = 2;
+    car.add(crack);
+    // the front of the bonnet, kinked up in two panels
+    const paint = new THREE.MeshStandardMaterial({ color: 0x9a1a22, roughness: 0.6, metalness: 0.1 });
+    const buckle = new THREE.Group();
+    [-0.5, 0.5].forEach((x, i) => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.05, 0.9), paint);
+      p.position.set(x, 0.94, -2.2);
+      p.rotation.set(0.22 + i * 0.08, 0, (i ? -1 : 1) * 0.07);
+      buckle.add(p);
+    });
+    buckle.visible = false;
+    car.add(buckle);
+    // a black disc over the passenger-side headlight
+    const dead = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12),
+      new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    dead.position.set(0.7, 0.66, -2.72);
+    dead.rotation.y = Math.PI;
+    dead.visible = false;
+    car.add(dead);
+    d = car.userData.damage = { cv, tex, buckle, dead };
+  }
+
+  // the crack: a star low on the passenger side, then more stars
+  const g = d.cv.getContext('2d');
+  g.clearRect(0, 0, 512, 128);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const stars = [[330, 96], [150, 70], [420, 40], [250, 30]].slice(0, Math.min(level, 4));
+  g.lineCap = 'round';
+  for (const [cx, cy] of stars) {
+    for (let r = 0; r < 11; r++) {
+      const a = rnd() * Math.PI * 2, len = 40 + rnd() * 120;
+      let x = cx, y = cy;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 1; k <= 4; k++) {
+        const aa = a + (rnd() - 0.5) * 0.6;
+        x += Math.cos(aa) * len / 4; y += Math.sin(aa) * len / 4;
+        g.lineTo(x, y);
+      }
+      g.strokeStyle = 'rgba(235,240,245,0.75)'; g.lineWidth = 1.6; g.stroke();
+    }
+    // the rings round the point of impact
+    for (let ring = 1; ring <= 2; ring++) {
+      g.beginPath(); g.arc(cx, cy, 8 * ring, 0, Math.PI * 2);
+      g.strokeStyle = 'rgba(235,240,245,0.55)'; g.lineWidth = 1.2; g.stroke();
+    }
+    g.fillStyle = 'rgba(240,244,248,0.8)';
+    g.beginPath(); g.arc(cx, cy, 4, 0, Math.PI * 2); g.fill();
+  }
+  d.tex.needsUpdate = true;
+  d.buckle.visible = level >= 1;
+  d.dead.visible = level >= 2;
+}
+
 /* the sky, a bright morning over the desert: clear and blue, the sun
    still low enough to warm the horizon */
 function dawnTexture() {

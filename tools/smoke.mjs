@@ -26,7 +26,8 @@
    Each shot is written twice: NN-name.png is the 3D frame alone and
    NN-name-hud.png is the page as a player sees it. The run fails on a
    shot that is near-black (it never rendered), a shot the game says was
-   taken mid-fade, a drive that stalls, or any error on the page.
+   taken mid-fade, a drive that stalls, a wreck that ends the game instead
+   of waking you at the bar, or any error on the page.
    SMOKE_TRACE=1 prints what the driving autopilot is doing.
    ============================================================ */
 
@@ -214,8 +215,26 @@ try {
   await shot('act3-desert');
   const along = s.road ? s.road[2] : 0;
   if (!s.over && along < 400) problems.push(`the drive stalled ${along}m down the road`);
-  if (s.over) console.log('  (the drive ended early; the autopilot left the road)');
-  else {
+  if (s.crashes) console.log('  (the autopilot put the car off the road)');
+  // A wreck is not the end: hard right at speed, into the scrub, and you
+  // should come to at the ring bar with the case empty and the car dented.
+  const before = await cmd({});
+  await cmd({ keys: { KeyW: true, KeyD: true }, steps: 360 });
+  await cmd({ keys: { KeyW: false, KeyD: false } });
+  s = await settle();
+  const [bx, bz] = s.pos || [99, 99];
+  if (s.over) problems.push('a wreck ended the game');
+  else if (s.crashes !== before.crashes + 1) problems.push(`steering into the scrub did not wreck the car (crashes ${s.crashes})`);
+  else if (s.act !== 1 || s.stock !== 0 || Math.hypot(bx, bz) > 11) {
+    problems.push(`after the wreck: act ${s.act}, ${s.stock} left in the case, at ${s.pos}, not the bar`);
+  }
+  await shot('wreck-bar');
+  if (!s.over) {
+    await cmd({ act3: 1 });
+    await settle();
+    await shot('wreck-dented');
+  }
+  if (!s.over) {
     await cmd({ act4: 1 });
     await settle();
     await shot('act4-foyer');
