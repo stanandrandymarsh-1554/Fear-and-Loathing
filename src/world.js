@@ -20,7 +20,7 @@
    SCALE. Real big top is ~90 m across; this rotunda is 72 m
    (R = 36), which keeps the proportions and the sightlines while
    staying walkable. Everything else is sized off a 1.78 m person:
-   slot machines 0.44 m wide and 1.72 m to the top of the sign, bar
+   slot machines 0.66 m wide and 2.1 m to the top of the sign, bar
    top at 1.1 m, the front desk at 1.07 m, stools at 0.78 m, rail at
    1.0 m, dome springing at 6 m and apex at 22 m.
    ============================================================ */
@@ -1963,11 +1963,10 @@ export function buildWorld(parent) {
   }
 
   /* ======================= THE SLOTS
-     Sized off the real thing. A Bally upright of 1970 is 41 cm wide, 46
-     deep and 86 tall with its sign, and it stands on a base in a long
-     bank of them, so the top of the sign is about level with your eyes.
-     These were 1.5 m wide and three metres tall -- twice the height of the
-     people playing them. */
+     Full-size casino cabinets: 66 cm wide, on a base, the lit sign about
+     2.1 m up -- a machine you sit down in front of, not a toy on a shelf.
+     (The first pass was 1.5 m wide and three metres tall; the second was a
+     41 cm antique, a thousand of them, and they read as miniatures.) */
   const SCREEN_POOL = 8;
   const screens = [];
   for (let i = 0; i < SCREEN_POOL; i++) {
@@ -1975,7 +1974,7 @@ export function buildWorld(parent) {
     rollScreen(tex);
     screens.push({ tex, mat: new THREE.MeshBasicMaterial({ map: tex }), t: Math.random() * 3 });
   }
-  const SLOT = { w: 0.44, h: 0.72, d: 0.42, base: 0.78, sign: 0.22 };
+  const SLOT = { w: 0.66, h: 1.05, d: 0.6, base: 0.72, sign: 0.32 };
 
   /* Casinos do not lay machines on radial spokes -- that was a diagram, not
      a floor. A real floor is a GRID: banks of machines set back-to-back in
@@ -1985,12 +1984,11 @@ export function buildWorld(parent) {
      here is a circle, so the banks get shorter as they approach the wall.
      A lane is left clear on the centre line, because that is the walk from
      the lobby mouth to the bar and on to the elevators. */
-  // A bank with its stools is two metres across, so rows 3.4 m apart
-  // leave an aisle you walk down between the stool backs -- as tight as a
-  // real floor. (At five metres the real-size banks sat in open carpet.)
-  const ROW_Z   = [10.6, 14.0, 17.4, 20.8, 24.2, 27.6, 31.0];  // mirrored to -Z
-  const PITCH   = 0.62;   // machines along a bank
-  const BACK    = 0.3;    // bank centre line to a cabinet's centre
+  // Three rows of banks each side, seven metres apart: a couple of hundred
+  // machines, not a thousand, with room to walk between the stool backs.
+  const ROW_Z   = [11.5, 18.5, 25.5];  // mirrored to -Z
+  const PITCH   = 0.82;   // machines along a bank
+  const BACK    = 0.34;   // bank centre line to a cabinet's centre
   // Cross-aisles every eight metres. With only one pair of them the walk
   // from the lobby to the bar ran head-first into a bank and you slid
   // along it blind for twenty metres, because the banks run east-west and
@@ -2003,7 +2001,7 @@ export function buildWorld(parent) {
     const rad = Math.hypot(x, z);
     if (rad > 33.0 || rad < 9.6) return true;             // wall, and the bar
     if (Math.abs(x) < 4.6) return true;                   // the centre walk
-    if (AISLE_X.some((ax) => Math.abs(x - ax) < 1.4)) return true;
+    if (AISLE_X.some((ax) => Math.abs(x - ax) < 2.3)) return true;
     if (Math.abs(z) > 25.5 && Math.abs(x) < 7.5) return true;  // the two mouths
     return false;
   };
@@ -2028,8 +2026,8 @@ export function buildWorld(parent) {
   });
   // A collider per run, not per machine: a thousand boxes would be a
   // thousand tests a frame, and a bank is solid along its length anyway.
-  runs.forEach((r) => box((r.x0 + r.x1) / 2, r.rowZ + r.face * 0.29,
-    (r.x1 - r.x0) / 2 + PITCH / 2, 0.29));
+  runs.forEach((r) => box((r.x0 + r.x1) / 2, r.rowZ + r.face * BACK,
+    (r.x1 - r.x0) / 2 + PITCH / 2, BACK));
 
   // the lit sign on top: white glass, tinted per machine, flickering
   const crownMat = new THREE.MeshBasicMaterial({ map: canvasTex(128, 64, (g, w, h) => {
@@ -2041,14 +2039,14 @@ export function buildWorld(parent) {
   const SLOT_PARTS = {
     // the base is one long box per run: the bank is a single piece of
     // furniture, and a box per machine was a thousand more for nothing
-    base: [new THREE.BoxGeometry(1, SLOT.base, 0.58), mat({ color: 0x3a0e10, roughness: 0.7, metalness: 0.1 })],
+    base: [new THREE.BoxGeometry(1, SLOT.base, BACK * 2), mat({ color: 0x3a0e10, roughness: 0.7, metalness: 0.1 })],
     body: [new THREE.BoxGeometry(SLOT.w, SLOT.h, SLOT.d), mat({ color: 0xa8a8b0, roughness: 0.3, metalness: 0.85 })],
-    crown: [new THREE.BoxGeometry(SLOT.w, SLOT.sign, 0.3), crownMat],
-    tray: [new THREE.BoxGeometry(0.3, 0.07, 0.12), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
+    crown: [new THREE.BoxGeometry(SLOT.w, SLOT.sign, 0.4), crownMat],
+    tray: [new THREE.BoxGeometry(0.46, 0.08, 0.14), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
     // a thousand-odd of each, so they are as plain as they can be and still
     // read at arm's length: a four-sided rod, an eight-sided ball
-    rod: [new THREE.CylinderGeometry(0.014, 0.014, 0.36, 4, 1, true), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
-    knob: [new THREE.OctahedronGeometry(0.045, 0), mat({ color: 0xc8101a, roughness: 0.25, metalness: 0.2 })],
+    rod: [new THREE.CylinderGeometry(0.016, 0.016, 0.45, 4, 1, true), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
+    knob: [new THREE.OctahedronGeometry(0.05, 0), mat({ color: 0xc8101a, roughness: 0.25, metalness: 0.2 })],
   };
   const screenGeo = new THREE.PlaneGeometry(SLOT.w - 0.04, SLOT.h - 0.04);
   const stripCols = [0xff4a3a, 0x3ae2ff, 0xffc83a, 0xc07aff, 0xb6ff4a, 0xff7ad9];
@@ -2078,17 +2076,17 @@ export function buildWorld(parent) {
         const f = b.perZ;
         put(P.body, i, b.x, cabY, b.z);
         put(P.crown, i, b.x, SLOT.base + SLOT.h + SLOT.sign / 2, b.z - f * 0.04);
-        put(P.tray, i, b.x, SLOT.base + 0.07, b.z + f * (SLOT.d / 2 + 0.05));
+        put(P.tray, i, b.x, SLOT.base + 0.1, b.z + f * (SLOT.d / 2 + 0.06));
         // the handle, on the right as you face the machine, leant back a little
         const side = -f;                 // the machine's own right, in world x
         tilt.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.25 * f);
-        put(P.rod, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.12, b.z + f * 0.02, tilt);
-        put(P.knob, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.31, b.z - f * 0.03);
+        put(P.rod, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.1, b.z + f * 0.02, tilt);
+        put(P.knob, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.33, b.z - f * 0.04);
         // a colour to each stretch of bank, the way a floor is zoned by game
         P.crown.setColorAt(i, c.setHex(stripCols[Math.abs(Math.floor(b.x / 8) * 3 + Math.round(b.rowZ)) % stripCols.length]));
       });
       runList.forEach((r, i) => {
-        p.set((r.x0 + r.x1) / 2, SLOT.base / 2, r.rowZ + r.face * 0.29);
+        p.set((r.x0 + r.x1) / 2, SLOT.base / 2, r.rowZ + r.face * BACK);
         P.base.setMatrixAt(i, m.compose(p, q.identity(), new THREE.Vector3(r.x1 - r.x0 + PITCH, 1, 1)));
       });
       for (const key in P) { P[key].instanceMatrix.needsUpdate = true; P[key].computeBoundingSphere(); scene.add(P[key]); }
@@ -2103,8 +2101,8 @@ export function buildWorld(parent) {
       sc.rotation.y = b.ry;
       scene.add(sc);
 
-      if (i % 4 === 0) {
-        const sx = b.x, sz = b.z + f * 0.72;
+      if (i % 2 === 0) {
+        const sx = b.x, sz = b.z + f * (SLOT.d / 2 + 0.45);
         addStool(scene, sx, sz);
         spots.slotSeats.push({ x: sx, z: sz, ry: b.ry + Math.PI });
       }
@@ -2265,8 +2263,8 @@ export function buildWorld(parent) {
     ringPath(8.0, 16, 0),
     ringPath(8.6, 16, 0.4),
     ringPath(32.6, 20, 0.2),
-    // (in the centre walk, where no bank reaches: at x = 5 the real-size
-    // banks, a machine every 62 cm, stood in the way)
+    // (in the centre walk, where no bank reaches: at x = 5 it walked
+    // through the end of a bank)
     [{ x: -4, z: -52 }, { x: -4, z: -34 }, { x: -4, z: -14 }, { x: 3.8, z: -14 },
      { x: 3.8, z: -34 }, { x: 3.8, z: -52 }],
     [{ x: 2, z: 50 }, { x: 2, z: 34 }, { x: 2, z: 16 }, { x: -7, z: 16 },
