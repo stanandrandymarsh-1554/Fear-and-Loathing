@@ -3,12 +3,8 @@
   "configurations": [
     {
       "name": "fear-and-loathing",
-      "runtimeExecutable": "ruby",
-      "runtimeArgs": [
-        "-run", "-e", "httpd",
-        "/Users/stanmarsh/Desktop/Fear & Loathing",
-        "-p", "8777"
-      ],
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "npm install --no-audit --no-fund && npx vite --port 8777 --strictPort"],
       "port": 8777
     }
   ]

@@ -4,7 +4,7 @@
    game writes each frame:  --wreck (0..1), --fear, --loathing
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&family=IBM+Plex+Mono:wght@400;600&display=swap');
+@import './fonts.css';
 
 :root{
   --wreck: 0;

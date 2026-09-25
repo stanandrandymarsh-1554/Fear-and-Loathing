@@ -5,9 +5,10 @@
      SMOKE_SIZE=640x360 node tools/smoke.mjs
      SHOTS_DIR=/some/dir node tools/smoke.mjs
 
-   Runs the modular source, not the bundle: the dev channel it drives
-   (data-fl-cmd, in src/main.js) is stripped from the built file. three.js
-   is served from vendor/ so nothing is fetched from a network.
+   Runs the source through Vite's dev server, not the build: the dev
+   channel it drives (data-fl-cmd, in src/main.js) is stripped from the
+   build. three.js and the fonts are local, so nothing is fetched from a
+   network.
 
    WHY IT IS BUILT THIS WAY. A cloud container has no GPU, so WebGL is
    SwiftShader, on the CPU, and a frame of this game costs about a second
@@ -31,7 +32,6 @@
    SMOKE_TRACE=1 prints what the driving autopilot is doing.
    ============================================================ */
 
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -50,20 +50,15 @@ async function loadPlaywright() {
   return import(pathToFileURL(path.join(root, 'playwright', 'index.mjs')).href);
 }
 const { chromium } = await loadPlaywright();
+const { createServer } = await import('vite');
 
-/* ------------------------------------------------ static server */
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' };
-const server = http.createServer((req, res) => {
-  const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
-  if (!p.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
-  fs.readFile(p, (err, data) => {
-    if (err) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
-    res.end(data);
-  });
+/* ------------------------------------------------ the game, served */
+const server = await createServer({
+  root: ROOT, logLevel: 'error', clearScreen: false,
+  server: { host: '127.0.0.1', port: 0, hmr: false, watch: null },
 });
-await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const BASE = `http://127.0.0.1:${server.address().port}`;
+await server.listen();
+const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
 
 /* ------------------------------------------------ the browser */
 const browser = await chromium.launch({
@@ -80,11 +75,6 @@ page.on('console', (m) => {
   if (m.type() === 'error') problems.push('console.error: ' + m.text());
   else if (m.type() === 'warning') console.log('  (warning) ' + m.text().slice(0, 160));
 });
-await page.route('https://cdn.jsdelivr.net/npm/three@*/build/three.module.js',
-  (r) => r.fulfill({ path: path.join(ROOT, 'vendor', 'three.module.js'), contentType: 'text/javascript' }));
-// fonts fall back to the stack in ui.css; the network is not ours to wait on
-await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ body: '', contentType: 'text/css' }));
-
 await page.goto(BASE + '/index.html');
 const gl = await page.evaluate(() => {
   const g = document.createElement('canvas').getContext('webgl2');
@@ -94,7 +84,7 @@ const gl = await page.evaluate(() => {
 });
 if (!gl) {
   console.log('FAIL: no WebGL2 context in this browser, so there is nothing to photograph');
-  await browser.close(); server.close(); process.exit(1);
+  await browser.close(); await server.close(); process.exit(1);
 }
 console.log(`WebGL: ${gl}\nviewport ${W}x${H}, shots -> ${OUT}`);
 fs.mkdirSync(OUT, { recursive: true });
@@ -250,7 +240,7 @@ try {
 }
 
 await browser.close();
-server.close();
+await server.close();
 console.log(`\n${shots.length} shots in ${((Date.now() - t0) / 1000).toFixed(0)}s -> ${OUT}`);
 if (problems.length) {
   console.log('FAIL\n  ' + problems.join('\n  '));
