@@ -58,9 +58,12 @@
   <div id="subtitle" class="hidden"></div>
   <div id="toast-stack"></div>
 
-  <!-- the phone only: the case behind a button, the stick, and the pedals -->
+  <!-- the phone only: the case behind a button, the stick, and the car's buttons -->
   <div id="case-btn">CASE</div>
-  <div id="pedals"><span>STICK &uarr; GO &middot; &darr; BRAKE</span><span>HOLD FOR GAS</span></div>
+  <div id="drive">
+    <div data-pad="left">&#9664;</div><div data-pad="right">&#9654;</div>
+    <div data-pad="brake">BRAKE</div><div data-pad="gas">GAS</div>
+  </div>
 </div>
 
 <div id="stick"><i></i></div>
@@ -145,7 +148,7 @@
       <div><b>LEFT THUMB</b> walk &middot; push past the ring to run</div>
       <div><b>TURN THE PHONE</b> look round &middot; <b>RIGHT THUMB</b> drag to look</div>
       <div><b>TAP</b> interact &middot; answer &middot; <b>CASE</b> take a dose</div>
-      <div><b>IN THE CAR</b> tip it like a wheel &middot; left stick up to go, down to brake &middot; or hold the right thumb for gas</div>
+      <div><b>IN THE CAR</b> hold <b>GAS</b> to go &middot; <b>BRAKE</b> to stop, hold to reverse &middot; the arrows steer</div>
     </div>
 
     <button id="start">BEGIN THE DRIVE</button>

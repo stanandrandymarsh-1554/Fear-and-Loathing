@@ -12,7 +12,7 @@ import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js
 import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
-import { touch, initTouch, askForMotion, sampleTouch, centreWheel } from './touch.js';
+import { touch, initTouch, askForMotion, sampleTouch, resetTouch } from './touch.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -1570,7 +1570,7 @@ function phoneInput() {
   const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
   document.documentElement.classList.toggle('driving', driving);
 
-  // in the car the phone is the wheel and the thumbs are on the pedals
+  // in the car the thumbs are on the buttons and the head is on the road
   if (!game.over && !driving) {
     player.lookLag.x -= t.yaw * GYRO;
     player.lookLag.y -= t.pitch * GYRO;
@@ -1584,28 +1584,20 @@ function phoneInput() {
   phone.run = !still && t.run;
 
   if (driving) {
-    // straight ahead is however you were holding it as you got in
     if (!phoneDriving) {
-      centreWheel();
-      game.say('Tip the phone like a wheel to steer. Left thumb up to go, down to brake '
-        + '-- or hold the right thumb down for gas.', null, 6);
+      resetTouch();
+      game.say('Hold GAS to go and BRAKE to stop -- keep holding it to reverse. '
+        + 'The arrows steer.', null, 6);
     }
-    // The wheel. The car only knows A and D, so the phone works them: held
-    // while the wheel is short of where the phone is, let go once it is
-    // there. The lock is stepCar's own, so a phone tipped halfway puts the
-    // wheel halfway at any speed. The car itself is not touched.
-    keys.KeyW = t.gas;
-    keys.KeyS = t.brake;
-    const v = Math.abs(car.speed);
-    const lock = 0.55 / (1 + Math.max(0, v - 4) * 0.4 + v * v * 0.012);
-    // the stick steers too, if it is pushed sideways with any conviction
-    const steer = Math.abs(t.strafe) > 0.3 ? -t.strafe : t.steer;
-    const err = steer * lock - (car.wheel || 0);
-    keys.KeyA = err > 0.012;
-    keys.KeyD = err < -0.012;
+    // the four buttons are the four keys, held for as long as they are held
+    keys.KeyW = t.pads.gas;
+    keys.KeyS = t.pads.brake;
+    keys.KeyA = t.pads.left;
+    keys.KeyD = t.pads.right;
     phoneDriving = true;
   } else if (phoneDriving) {
     keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false;
+    resetTouch();
     phoneDriving = false;
   }
 }
@@ -1622,7 +1614,7 @@ initTouch({
     if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
     if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
-    // in the car a quick tap is a dab on a pedal
+    // in the car the buttons are all there is
     if (game.dlg || document.documentElement.classList.contains('driving')) return;
     interact();
   },

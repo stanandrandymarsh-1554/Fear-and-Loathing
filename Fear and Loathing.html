@@ -703,7 +703,7 @@ canvas#gl{
    The phone (src/touch.js). Nothing here applies without html.touch,
    which is only ever set on a touch screen.
    ------------------------------------------------------------ */
-#case-btn, #pedals, #turn-phone, .controls-touch{ display:none; }
+#case-btn, #drive, #turn-phone, .controls-touch{ display:none; }
 html.touch .controls{ display:none; }
 html.touch .controls-touch{
   display:block; margin-top:20px;
@@ -762,12 +762,27 @@ html.touch #stick i{
   background:rgba(255,180,0,.35); border:1px solid rgba(255,180,0,.7);
 }
 
-html.touch.driving #pedals{
-  display:flex; justify-content:space-between;
-  position:fixed; left:18px; right:18px; top:44%; z-index:5;
-  font-family:var(--font-display); font-size:15px; letter-spacing:.3em;
-  color:rgba(244,233,200,.28); pointer-events:none;
+/* the car: steer under the left thumb, brake and gas under the right */
+html.touch.driving #drive{ display:block; }
+#drive [data-pad]{
+  position:fixed; z-index:5; pointer-events:none;
+  width:92px; height:92px; border-radius:18px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-display); font-size:17px; letter-spacing:.12em;
+  color:rgba(244,233,200,.8); background:rgba(8,5,3,.4);
+  border:1px solid rgba(244,233,200,.35);
 }
+#drive [data-pad="left"]{ left:calc(env(safe-area-inset-left) + 20px); bottom:22px; font-size:30px; }
+#drive [data-pad="right"]{ left:calc(env(safe-area-inset-left) + 128px); bottom:22px; font-size:30px; }
+#drive [data-pad="brake"]{ right:calc(env(safe-area-inset-right) + 128px); bottom:22px; }
+#drive [data-pad="gas"]{ right:calc(env(safe-area-inset-right) + 20px); bottom:22px; height:124px; }
+#drive [data-pad].on{ background:rgba(255,180,0,.4); border-color:rgba(255,180,0,.9); color:#fff; }
+/* and what sat under them moves out of the way: the case to the middle,
+   the meters to the top corner, the wallet away (nothing to buy out here) */
+html.touch.driving #case-btn{ right:auto; left:50%; transform:translateX(-50%); }
+html.touch.driving #meters{ top:14px; bottom:auto; gap:6px; }
+html.touch.driving #stats{ top:108px; bottom:auto; }
+html.touch.driving #wallet{ display:none; }
 
 @media (orientation: portrait){
   html.touch #turn-phone{
@@ -823,9 +838,12 @@ html.touch.driving #pedals{
   <div id="subtitle" class="hidden"></div>
   <div id="toast-stack"></div>
 
-  <!-- the phone only: the case behind a button, the stick, and the pedals -->
+  <!-- the phone only: the case behind a button, the stick, and the car's buttons -->
   <div id="case-btn">CASE</div>
-  <div id="pedals"><span>STICK &uarr; GO &middot; &darr; BRAKE</span><span>HOLD FOR GAS</span></div>
+  <div id="drive">
+    <div data-pad="left">&#9664;</div><div data-pad="right">&#9654;</div>
+    <div data-pad="brake">BRAKE</div><div data-pad="gas">GAS</div>
+  </div>
 </div>
 
 <div id="stick"><i></i></div>
@@ -910,7 +928,7 @@ html.touch.driving #pedals{
       <div><b>LEFT THUMB</b> walk &middot; push past the ring to run</div>
       <div><b>TURN THE PHONE</b> look round &middot; <b>RIGHT THUMB</b> drag to look</div>
       <div><b>TAP</b> interact &middot; answer &middot; <b>CASE</b> take a dose</div>
-      <div><b>IN THE CAR</b> tip it like a wheel &middot; left stick up to go, down to brake &middot; or hold the right thumb for gas</div>
+      <div><b>IN THE CAR</b> hold <b>GAS</b> to go &middot; <b>BRAKE</b> to stop, hold to reverse &middot; the arrows steer</div>
     </div>
 
     <button id="start">BEGIN THE DRIVE</button>
@@ -62493,18 +62511,17 @@ var __m_touch = (function(){
                the left half and push. Past the ring is a run.
      also      drag on the right half to look (for the big turns), tap
                anything to use it.
-     driving   the racing-game standard (Asphalt, Real Racing): tip the
-               phone like a wheel, read as its roll against gravity, zeroed
-               when you get in. Gravity does not drift. The left thumb is
-               the same stick as on foot -- up to go, down to brake and
-               then reverse -- and a right thumb held anywhere is gas too.
-               (The left thumb used to be a plain brake pedal, so a thumb
-               put down the way you walk sat there reversing.)
+     driving   four buttons fixed on the screen, held like the keys they
+               stand for: steer left and right under the left thumb, brake
+               and gas under the right. Nothing held is nothing happening:
+               no tilt, no stick, nothing to be zeroed or to drift. Which
+               buttons are down is worked out afresh from every finger on
+               the glass at every touch, so a lost finger cannot leave one
+               held.
    ============================================================ */
 const THREE = window.THREE;
 
 const DEG = Math.PI / 180;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const params = new URLSearchParams(location.search);
 const touch = {
@@ -62512,10 +62529,9 @@ const touch = {
   ready: false,        // motion permission granted and a reading in
   denied: false,
   yaw: 0, pitch: 0,    // radians turned since last sample: + left, + up
-  roll: 0, roll0: 0,   // the wheel: + anticlockwise, and where it sits at rest
   dragX: 0, dragY: 0,  // right-hand drag since last sample, px
   stick: { x: 0, y: 0, run: false },
-  gas: false,
+  pads: { left: false, right: false, brake: false, gas: false },
   fingers: new Map(),
 };
 
@@ -62546,8 +62562,6 @@ function onOrientation(e) {
 
   // which way is up, as the screen sees it
   up.set(0, 1, 0).applyQuaternion(qInv);
-  // the wheel: the tip of the screen against gravity, anticlockwise +
-  touch.roll = Math.atan2(up.x, up.y);
 
   const dt = lastT ? (e.timeStamp - lastT) / 1000 : 0;
   lastT = e.timeStamp;
@@ -62593,9 +62607,6 @@ function askForMotion() {
   }
 }
 
-/** the wheel is straight however you are holding it as you get in */
-function centreWheel() { touch.roll0 = touch.roll; }
-
 // ---------------------------------------------------------- the fingers
 const TAP_MS = 280, TAP_PX = 14;
 const STICK_R = 56;                  // px from the thumb's first touch to the ring
@@ -62620,14 +62631,15 @@ function onStart(e) {
     const left = t.clientX < innerWidth / 2;
     const f = { x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY,
       t0: now, moved: false, left, target: e.target, stick: false };
-    // the left thumb, down on the view, is the stick -- one at a time
-    if (left && e.target.id === 'gl' && stickId === null) {
+    // the left thumb, down on the view, is the stick -- one at a time, and
+    // never in the car, where the thumbs are on the buttons
+    if (left && e.target.id === 'gl' && stickId === null && !handlers.driving?.()) {
       f.stick = true; stickId = t.identifier; stickX = t.clientX; stickY = t.clientY;
       showStick(true);
     }
     touch.fingers.set(t.identifier, f);
   }
-  pedals();
+  pads(e.touches);
 }
 
 function onMove(e) {
@@ -62637,7 +62649,9 @@ function onMove(e) {
     const f = touch.fingers.get(t.identifier);
     if (!f) continue;
     if (Math.hypot(t.clientX - f.x0, t.clientY - f.y0) > TAP_PX) f.moved = true;
-    if (f.stick) {
+    if (handlers.driving?.()) {
+      // in the car a finger is only ever on a button
+    } else if (f.stick) {
       const dx = t.clientX - stickX, dy = t.clientY - stickY;
       const d = Math.hypot(dx, dy) / STICK_R;
       touch.stick.run = d > 1.35;
@@ -62651,6 +62665,7 @@ function onMove(e) {
     }
     f.x = t.clientX; f.y = t.clientY;
   }
+  pads(e.touches);
 }
 
 function onEnd(e) {
@@ -62661,21 +62676,50 @@ function onEnd(e) {
     const f = touch.fingers.get(t.identifier);
     touch.fingers.delete(t.identifier);
     if (!f) continue;
-    if (f.stick) {
-      stickId = null;
-      touch.stick.x = touch.stick.y = 0; touch.stick.run = false;
-      showStick(false);
-    }
+    if (f.stick) dropStick();
     if (!f.moved && now - f.t0 <= TAP_MS) handlers.tap?.(f.target, f.x0, f.y0);
   }
-  pedals();
+  // a finger the phone has forgotten about is not still held
+  const live = new Set([...e.touches].map((t) => t.identifier));
+  for (const [id, f] of touch.fingers) {
+    if (!live.has(id)) { touch.fingers.delete(id); if (f.stick) dropStick(); }
+  }
+  pads(e.touches);
 }
 
-/** in the car, a right thumb held on the view is the gas */
-function pedals() {
-  let gas = false;
-  for (const f of touch.fingers.values()) if (!f.left && f.target.id === 'gl') gas = true;
-  touch.gas = gas;
+function dropStick() {
+  stickId = null;
+  touch.stick.x = touch.stick.y = 0; touch.stick.run = false;
+  showStick(false);
+}
+
+/* The car's buttons. Held is whatever has a finger on it right now --
+   every finger on the glass, checked against every button, every time a
+   finger lands, moves or lifts -- with a little slack round each one so
+   a thumb that creeps off the edge still counts. */
+const padEls = [...document.querySelectorAll('#drive [data-pad]')];
+const SLACK = 18;
+function pads(list) {
+  const p = touch.pads;
+  p.left = p.right = p.brake = p.gas = false;
+  if (handlers.driving?.()) {
+    for (const el of padEls) {
+      const r = el.getBoundingClientRect();
+      for (const t of list) {
+        if (t.clientX >= r.left - SLACK && t.clientX <= r.right + SLACK
+          && t.clientY >= r.top - SLACK && t.clientY <= r.bottom + SLACK) p[el.dataset.pad] = true;
+      }
+    }
+  }
+  for (const el of padEls) el.classList.toggle('on', p[el.dataset.pad]);
+}
+
+/** getting in or out: nothing held over from before, nothing carried on */
+function resetTouch() {
+  if (stickId !== null) dropStick();
+  for (const f of touch.fingers.values()) { f.stick = false; f.moved = true; }
+  touch.dragX = touch.dragY = touch.yaw = touch.pitch = 0;
+  pads([]);
 }
 
 function initTouch(h) {
@@ -62697,31 +62741,25 @@ function initTouch(h) {
      dragX, dragY   px dragged by any finger that is not the stick
      walk, strafe   -1..1 from the stick, + forward / right
      run            the stick pushed past its ring
-     steer          -1..1, + is left, the way the car's A key turns it
-     gas, brake     the car's pedals: the stick up or a right thumb, the
-                    stick down */
+     pads           the car's four buttons, each held or not */
 function sampleTouch() {
   const s = touch.stick;
   // a little dead zone in the middle of the stick, rescaled so the edge
   // of it is still a gentle walk rather than a jump
   const m = Math.hypot(s.x, s.y);
   const k = m < 0.12 ? 0 : (m - 0.12) / (0.88 * m);
-  let roll = (touch.roll - touch.roll0) / DEG;
-  if (roll > 180) roll -= 360;
-  if (roll < -180) roll += 360;
   const out = {
     yaw: touch.yaw, pitch: touch.pitch,
     dragX: touch.dragX, dragY: touch.dragY,
     walk: -s.y * k, strafe: s.x * k, run: s.run,
-    steer: touch.ready ? Math.sign(roll) * clamp((Math.abs(roll) - 2) / 28, 0, 1) : 0,
-    gas: touch.gas || -s.y * k > 0.3, brake: s.y * k > 0.3,
+    pads: touch.pads,
   };
   touch.yaw = touch.pitch = 0;
   touch.dragX = touch.dragY = 0;
   return out;
 }
 
-return { touch, askForMotion, centreWheel, initTouch, sampleTouch };
+return { touch, askForMotion, resetTouch, initTouch, sampleTouch };
 })();
 
 /* ==========================================================
@@ -62742,7 +62780,7 @@ const { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } = __m_npc;
 const { Post } = __m_post;
 const { Audio } = __m_audio;
 const { Game, SUBSTANCES, STORY_COMPOSURE } = __m_game;
-const { touch, initTouch, askForMotion, sampleTouch, centreWheel } = __m_touch;
+const { touch, initTouch, askForMotion, sampleTouch, resetTouch } = __m_touch;
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -64134,7 +64172,7 @@ function phoneInput() {
   const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
   document.documentElement.classList.toggle('driving', driving);
 
-  // in the car the phone is the wheel and the thumbs are on the pedals
+  // in the car the thumbs are on the buttons and the head is on the road
   if (!game.over && !driving) {
     player.lookLag.x -= t.yaw * GYRO;
     player.lookLag.y -= t.pitch * GYRO;
@@ -64148,28 +64186,20 @@ function phoneInput() {
   phone.run = !still && t.run;
 
   if (driving) {
-    // straight ahead is however you were holding it as you got in
     if (!phoneDriving) {
-      centreWheel();
-      game.say('Tip the phone like a wheel to steer. Left thumb up to go, down to brake '
-        + '-- or hold the right thumb down for gas.', null, 6);
+      resetTouch();
+      game.say('Hold GAS to go and BRAKE to stop -- keep holding it to reverse. '
+        + 'The arrows steer.', null, 6);
     }
-    // The wheel. The car only knows A and D, so the phone works them: held
-    // while the wheel is short of where the phone is, let go once it is
-    // there. The lock is stepCar's own, so a phone tipped halfway puts the
-    // wheel halfway at any speed. The car itself is not touched.
-    keys.KeyW = t.gas;
-    keys.KeyS = t.brake;
-    const v = Math.abs(car.speed);
-    const lock = 0.55 / (1 + Math.max(0, v - 4) * 0.4 + v * v * 0.012);
-    // the stick steers too, if it is pushed sideways with any conviction
-    const steer = Math.abs(t.strafe) > 0.3 ? -t.strafe : t.steer;
-    const err = steer * lock - (car.wheel || 0);
-    keys.KeyA = err > 0.012;
-    keys.KeyD = err < -0.012;
+    // the four buttons are the four keys, held for as long as they are held
+    keys.KeyW = t.pads.gas;
+    keys.KeyS = t.pads.brake;
+    keys.KeyA = t.pads.left;
+    keys.KeyD = t.pads.right;
     phoneDriving = true;
   } else if (phoneDriving) {
     keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false;
+    resetTouch();
     phoneDriving = false;
   }
 }
@@ -64186,7 +64216,7 @@ initTouch({
     if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
     if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
-    // in the car a quick tap is a dab on a pedal
+    // in the car the buttons are all there is
     if (game.dlg || document.documentElement.classList.contains('driving')) return;
     interact();
   },
