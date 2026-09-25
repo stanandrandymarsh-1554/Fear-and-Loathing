@@ -258,15 +258,17 @@ function clearTraffic() {
    road for next time. */
 const COP_AT = 1150;                 // metres out of town when he finds you
 const COP_GIVES_UP = 30;             // seconds of not stopping
-const cop = { state: 'idle', s: 0, lat: LANE, v: 0, t: 0, siren: 0, mesh: makePatrolCar() };
+const cop = { state: 'idle', s: 0, lat: LANE, v: 0, t: 0, siren: 0, mesh: makePatrolCar(), walk: null };
 cop.mesh.visible = false;
 desert.group.add(cop.mesh);
+// (the patrolman himself is built with the rest of the cast, further down)
 function copReset() {
   if (cop.state !== 'done') {
     cop.state = 'idle';
     game.resetTask('chp');
   }
   cop.mesh.visible = false;
+  patrolman.group.visible = false;
 }
 function placeCop() {
   roadPoint(cop.s, cop.lat, tp);
@@ -338,7 +340,20 @@ function updateCop(dt) {
     cop.s += (target - cop.s) * Math.min(1, dt * 1.6);
     cop.lat += (plat - cop.lat) * Math.min(1, dt * 1.6);
     placeCop();
-    if (cop.t > 2.2 && !game.dlg) { cop.state = 'talk'; game.openDialogue('chp'); }
+    // then the door, and he walks up the side of your car to the window
+    if (cop.t > 1.4) {
+      const P = patrolman.group;
+      if (!P.visible) {
+        copPoint(cop.mesh.position, cop.mesh.rotation.y, -1.25, -0.3, P.position);
+        P.position.y = cop.mesh.position.y;
+        P.visible = true;
+        audio.door();
+      }
+      const to = copPoint(desert.car.position, car.heading, -1.85, 0.25, _copTo);
+      if (walkTo(P, to, 1.35, dt) || cop.t > 12) {
+        if (!game.dlg) { cop.state = 'talk'; game.openDialogue('chp'); }
+      }
+    }
     return true;
   }
   if (cop.state === 'talk') {
@@ -356,9 +371,30 @@ function updateCop(dt) {
     if (ps - cop.s > 400) { cop.mesh.visible = false; cop.state = 'done'; }
     return false;
   }
-  // done: parked where he stopped you until he is out of sight
-  if (cop.mesh.visible && ps - cop.s > 400) cop.mesh.visible = false;
+  // done: he walks back to his car and gets in, and it stays parked where
+  // he stopped you until it is out of sight
+  if (patrolman.group.visible) {
+    const back = copPoint(cop.mesh.position, cop.mesh.rotation.y, -1.25, -0.3, _copTo);
+    if (walkTo(patrolman.group, back, 1.4, dt)) { patrolman.group.visible = false; audio.door(); }
+  }
+  if (cop.mesh.visible && ps - cop.s > 400) { cop.mesh.visible = false; patrolman.group.visible = false; }
   return false;
+}
+const _copTo = new THREE.Vector3();
+/** a point beside a car (desert-local): across (-x is the driver's side) and along (-z is forward) */
+function copPoint(at, heading, across, along, out) {
+  const c = Math.cos(heading), sn = Math.sin(heading);
+  out.set(at.x + across * c + along * sn, at.y, at.z - across * sn + along * c);
+  return out;
+}
+/** move a group toward a point at a walking pace; true once it is there */
+function walkTo(g, to, speed, dt) {
+  const dx = to.x - g.position.x, dz = to.z - g.position.z, d = Math.hypot(dx, dz);
+  if (d < 0.08) return true;
+  const k = Math.min(1, (speed * dt) / d);
+  g.position.x += dx * k; g.position.z += dz * k;
+  g.position.y += (to.y - g.position.y) * Math.min(1, dt * 4);
+  return d - speed * dt < 0.08;
 }
 
 /** @param dir +1 driving out (south), -1 driving back. Returns true on a crash. */
@@ -419,17 +455,17 @@ const bats = new BatSwarm(scene);
 
 const npcs = [
   new NPC({ id: 'clerk', name: 'SWAN', x: -18.8, z: -43, ry: Math.PI / 2, reach: 5.2,
-            skin: 0xd8b08c, suit: 0x3c1a44, tint: 0xffb400 }),
+            skin: 0xd8b08c, suit: 0x3c1a44, tint: 0xffb400, look: 'clerk', pose: 'counter' }),
   new NPC({ id: 'dealer', name: 'THE MAN AT THE BAR', x: 0, z: -4.4, ry: Math.PI, reach: 5.0,
-            skin: 0x8a6244, suit: 0x1e2a33, tint: 0x12e2e2 }),
+            skin: 0x8a6244, suit: 0x1e2a33, tint: 0x12e2e2, look: 'bartender', pose: 'counter' }),
   // at the nautical bar, among the lizards, where the film has him
   new NPC({ id: 'attorney', name: 'YOUR ATTORNEY', x: 29.9, z: -44.6, ry: Math.PI / 2, reach: 3.8,
-            skin: 0xb07a52, suit: 0x6a2020, tint: 0xff2d1f, scale: 1.06 }),
+            skin: 0xb07a52, suit: 0x6a2020, tint: 0xff2d1f, scale: 1.06, look: 'attorney' }),
   new NPC({ id: 'security', name: 'HOUSE SECURITY', x: 3.0, z: 34, ry: Math.PI, reach: 4.2,
-            skin: 0xc09070, suit: 0x252525, tint: 0xb6ff2e, scale: 1.12 }),
+            skin: 0xc09070, suit: 0x252525, tint: 0xb6ff2e, scale: 1.12, look: 'security' }),
   // the parking attendant out front: "I'll remember your face."
   new NPC({ id: 'valet', name: 'THE PARKING ATTENDANT', x: 1.3, z: world.frontage.PAVE_Z - 1.7,
-            ry: Math.PI, reach: 3.0, skin: 0xb08a6a, suit: 0x7a1420, tint: 0xffb400, halo: 0 }),
+            ry: Math.PI, reach: 3.0, skin: 0xb08a6a, suit: 0x7a1420, tint: 0xffb400, halo: 0, look: 'valet' }),
 ];
 npcs.forEach((n) => scene.add(n.group));
 
@@ -438,10 +474,10 @@ npcs.forEach((n) => scene.add(n.group));
 // y: he is IN the bath, not standing next to it -- only head and shoulders dry
 const gonzo = new NPC({ id: 'gonzo', name: 'YOUR ATTORNEY',
   x: 300 - 3.2, z: -7.5, y: -0.85, ry: 0, reach: 3.0, halo: 0.15,
-  skin: 0xc08a60, suit: 0x33202a, tint: 0xff2d1f });
+  skin: 0xc08a60, suit: 0x33202a, tint: 0xff2d1f, look: 'bath', pose: 'bath' });
 const maid = new NPC({ id: 'maid', name: 'HOUSEKEEPING',
   x: 300 - 6.9, z: 0, ry: Math.PI / 2, reach: 2.8, halo: 0,
-  skin: 0xd8b08c, suit: 0x8fa0a8, tint: 0xb6ff2e });
+  skin: 0xd8b08c, suit: 0x8fa0a8, tint: 0xb6ff2e, look: 'maid' });
 // she knocks, waits, is dealt with, and then she GOES: down the corridor
 // and out of sight, and the door shuts behind her
 const maidState = { phase: 'away', t: 0 };   // away | here | leaving | gone
@@ -449,21 +485,31 @@ const maidState = { phase: 'away', t: 0 };   // away | here | leaving | gone
 // Act four's cast, in world coordinates (convention-local + CONV_X).
 const registrar = new NPC({ id: 'registrar', name: 'REGISTRATION',
   x: CONV_X + CONV.registrar.x, z: CONV.registrar.z, ry: Math.PI / 2, reach: 3.2, halo: 0.4,
-  skin: 0xd8b08c, suit: 0x1f3a5a, tint: 0xffb400 });
+  skin: 0xd8b08c, suit: 0x1f3a5a, tint: 0xffb400, look: 'registrar', pose: 'counter' });
 // your attorney, in the foyer with supplies, and at the urn after the keynote
 const gonzoC = new NPC({ id: 'gonzo4', name: 'YOUR ATTORNEY',
   x: CONV_X + 4.6, z: 16.2, ry: -Math.PI / 2, reach: 3.0, halo: 0.5,
-  skin: 0xb07a52, suit: 0x6a2020, tint: 0xff2d1f, scale: 1.06 });
+  skin: 0xb07a52, suit: 0x6a2020, tint: 0xff2d1f, scale: 1.06, look: 'attorney' });
 const GONZO_AT_URN = new THREE.Vector3(CONV_X + CONV.urn.x - 2.6, 0, CONV.urn.z - 1.0);
 const georgiaDA = new NPC({ id: 'georgia', name: 'THE DELEGATE FROM GEORGIA',
   x: CONV_X + CONV.urn.x - 1.1, z: CONV.urn.z - 1.2, ry: Math.PI, reach: 3.0, halo: 0.5,
-  skin: 0xe0b090, suit: 0x8a8070, tint: 0xb6ff2e, scale: 1.1 });
+  skin: 0xe0b090, suit: 0x8a8070, tint: 0xb6ff2e, scale: 1.1, look: 'georgia' });
 // he stands on the stage, which is 0.7m up, behind the lectern and off to
 // one side of the screen so the slides are not projected onto his face
 const keynote = new NPC({ id: 'keynote', name: 'DR. BUMQUIST',
   x: CONV_X - 1.2, z: -14.25, y: 0.7, ry: 0, halo: 0.8,
-  skin: 0xd8b8a0, suit: 0x2a2a38, tint: 0x9ab0ff });
+  skin: 0xd8b8a0, suit: 0x2a2a38, tint: 0x9ab0ff, look: 'keynote', pose: 'lectern' });
 const convCast = [registrar, gonzoC, georgiaDA, keynote];
+// your attorney in the passenger seat, for the last morning: he rides in
+// whichever car is showing, parked at the kerb or out on the road
+const carGonzo = new NPC({ id: 'gonzoCar', name: 'YOUR ATTORNEY', x: 0.43, z: 0.5, ry: Math.PI,
+  halo: 0, skin: 0xb07a52, suit: 0x6a2020, tint: 0xff2d1f, look: 'attorney', pose: 'sit', seatY: 0.42, turns: false });
+carGonzo.group.visible = false;
+// the highway patrolman, who gets out and walks up to your window
+const patrolman = new NPC({ id: 'patrol', name: 'THE HIGHWAY PATROLMAN', x: 0, z: 0, ry: 0, halo: 0,
+  skin: 0xd0a080, suit: 0xb8a878, tint: 0xffb400, look: 'patrol' });
+patrolman.group.visible = false;
+desert.group.add(patrolman.group);
 // once you are done with him he goes to find a telephone: across the back
 // of the hall, out through the doors, and gone
 const GEORGIA_OUT = [[4, 11.2], [0, 12.8], [0, 20.2]].map(([x, z]) => new THREE.Vector3(CONV_X + x, 0, z));
@@ -1188,7 +1234,7 @@ function showCasino(on) {
   crowd.group.visible = on;
   bats.group.visible = on;
   // on the last morning your attorney is already out in the car
-  npcs.forEach((n) => { n.group.visible = on && !(game.finale && n.id === 'attorney'); });
+  npcs.forEach((n) => { n.group.visible = on && !((game.finale || game.leaving) && n.id === 'attorney'); });
   ghosts.forEach((g) => { g.group.visible = on; });
   pickups.forEach((pk) => { pk.group.visible = on && !pk.taken; });
   briefcase.group.visible = on && !briefcase.taken;
@@ -1196,6 +1242,8 @@ function showCasino(on) {
 
 function startActTwo() {
   game.enterSuite();
+  atty.with = false;
+  atty.trail.length = 0;
   showCasino(false);
   suite.show();
 
@@ -1254,6 +1302,7 @@ function startActFour() {
   convCrowd.group.visible = true;
   convCast.forEach((n) => { n.group.visible = true; });
   gonzoC.group.position.set(CONV_X + 4.6, 0, 16.2);
+  atty.trail.length = 0;
   conv.setSlide('title');
   scene.fog = FOG[4];
   camera.far = 400;
@@ -1957,6 +2006,7 @@ function driveCar(dt, s) {
     // the patrolman has gone about his day; he is not there on the way back
     // (and if he was still on your tail, the motel is where he lost interest)
     cop.mesh.visible = false;
+    patrolman.group.visible = false;
     if (cop.state !== 'idle' && cop.state !== 'done') { game.completeTask('chp'); cop.state = 'done'; }
     car.speed = 0;
     car.parked = true;
@@ -2049,7 +2099,8 @@ function collide(p) {
         else p.z += Math.sign(dz || 1) * oz;
       }
     }
-    for (const n of [registrar, gonzoC, georgiaDA]) {
+    // (not your attorney: he walks at your heels, and would shove you about)
+    for (const n of [registrar, georgiaDA]) {
       if (!n.group.visible || (n === georgiaDA && game.taskState('georgia') === 'done')) continue;
       const dx = p.x - n.group.position.x, dz = p.z - n.group.position.z;
       const d = Math.hypot(dx, dz) || 0.0001, need = 0.35 + RADIUS;
@@ -2273,6 +2324,211 @@ function movePlayer(dt, s) {
   );
 }
 
+/* ------------------------------------------------ your attorney, along
+   He is with you for most of it, the way he is in the film. On the floor
+   he is at the nautical bar until you have spoken to him, and after that
+   he comes with you: he walks the way you walked (a trail of where you
+   have been, so he goes round the slots rather than through them), stops
+   a couple of metres off when you stop, and every so often has something
+   to say about it. At the convention he does the same, and takes the seat
+   next to yours for the keynote. On the last morning he is in the car. */
+const atty = { with: false, trail: [], barkIn: 14, lastBark: null };
+const ATTY_GAP = 2.2;
+const BARKS = {
+  floor: [
+    ['Keep walking. Look like you own the carpet. Legally, we may.', 'hands'],
+    ['That man at the craps table has been a lizard since we came in. I am not going to mention it to him.', 'point'],
+    ['As your attorney I advise you to buy a drink and hold it. People trust a man holding a drink.', 'shrug'],
+    ['Do not look at the carpet. The carpet is looking for someone to blame.', 'shake'],
+    ['This is the main nerve of the American Dream, and it smells of popcorn and fear.', 'laugh'],
+    ['Somebody up there on the trapeze just looked at me with real contempt.', 'point'],
+    ['We are in no danger. I want that on the record. Mostly no danger.', 'hands'],
+    ['I would kill for a grapefruit. That is a figure of speech. Mostly.', 'fist'],
+  ],
+  high: [
+    ['Your face is doing something. Do not let it do it near the security man.', 'recoil'],
+    ['Breathe through the nose. The nose is on our side.', 'nod'],
+    ['I can see it working on you. Good. Now try not to tell anybody.', 'laugh'],
+  ],
+  conv: [
+    ['Four hundred cops and not one of them knows what we are. Smile at them.', 'laugh'],
+    ['Look at the badges. Everyone is somebody here. We are somebody too, it says so.', 'point'],
+    ['If anybody asks, I am your attorney and you are my attorney.', 'shrug'],
+  ],
+  car: [
+    ['As your attorney I advise you to drive at top speed. It is the only way out of this state.', 'point'],
+    ['Look at that sky. It is the colour of a pill I took once in Tijuana.', 'wave'],
+    ['I think we got away with it. I want to say that once, out loud, before it stops being true.', 'laugh'],
+    ['Do not stop for anything. Not the telephone. Not the police. Not me.', 'fist'],
+  ],
+};
+function attorneyHere() {
+  if (game.act === 1 && !game.finale && !game.leaving) return npcs[2];
+  if (game.act === 2) return gonzo;
+  if (game.act === 4) return gonzoC;
+  if (carGonzo.group.visible) return carGonzo;
+  return null;
+}
+/** follow the player along where they have actually walked */
+function follow(n, dt) {
+  const g = n.group, T = atty.trail;
+  const last = T[T.length - 1];
+  if (!last || Math.hypot(player.pos.x - last.x, player.pos.z - last.z) > 0.35) {
+    T.push({ x: player.pos.x, z: player.pos.z });
+    if (T.length > 80) T.shift();
+  }
+  // how far behind he is, along the trail
+  let behind = Math.hypot(T[0].x - g.position.x, T[0].z - g.position.z);
+  for (let i = 1; i < T.length; i++) behind += Math.hypot(T[i].x - T[i - 1].x, T[i].z - T[i - 1].z);
+  behind += Math.hypot(player.pos.x - T[T.length - 1].x, player.pos.z - T[T.length - 1].z);
+  // lost you entirely (a lift, a fade, a stool at the bar): catch up out of sight
+  if (behind > 16) {
+    const i = Math.max(0, T.length - 6);
+    g.position.set(T[i].x, g.position.y, T[i].z);
+    T.splice(0, i);
+    return;
+  }
+  if (behind > ATTY_GAP && !game.dlg) {
+    const speed = behind > 5 ? 3.4 : 1.5;
+    let left = Math.min(speed * dt, behind - ATTY_GAP);
+    while (left > 1e-4 && T.length) {
+      const p0 = T[0];
+      const dx = p0.x - g.position.x, dz = p0.z - g.position.z, d = Math.hypot(dx, dz);
+      if (d <= left) {
+        g.position.x = p0.x; g.position.z = p0.z; left -= d;
+        if (T.length > 1) T.shift(); else break;
+      } else { g.position.x += dx / d * left; g.position.z += dz / d * left; left = 0; }
+    }
+  }
+  // standing about: he faces you
+  n.homeYaw = Math.atan2(player.pos.x - g.position.x, player.pos.z - g.position.z);
+}
+function bark(where, s2, dt) {
+  atty.barkIn -= dt;
+  if (atty.barkIn > 0 || game.dlg || game._sayTimer > 0 || fade) return;
+  atty.barkIn = 24 + Math.random() * 22;
+  let pool = BARKS[where];
+  if (where === 'floor' && (s2.perception > 0.4 || s2.psych > 0.3) && Math.random() < 0.6) pool = BARKS.high;
+  let i = Math.floor(Math.random() * pool.length);
+  if (pool[i][0] === atty.lastBark) i = (i + 1) % pool.length;
+  atty.lastBark = pool[i][0];
+  game.say(pool[i][0], 'YOUR ATTORNEY', 5.5);
+  const n = attorneyHere();
+  if (n) n.gesture(pool[i][1], 2.2);
+}
+function updateAttorneyFloor(dt, s2) {
+  const n = npcs[2];
+  if (game.finale || game.leaving || game.act !== 1) return;
+  if (!atty.with) {
+    // he joins you once you have found him and heard him out
+    if (lastDlg === 'attorney' && !game.dlg) {
+      atty.with = true;
+      atty.trail.length = 0;
+      atty.barkIn = 10;
+      game.say('Your attorney gets up off the stool and falls in behind you, still talking.', null, 4);
+    }
+    return;
+  }
+  follow(n, dt);
+  bark('floor', s2, dt);
+}
+/* at the convention: with you through the foyer, beside you in the seats,
+   at the urn with the delegate from Georgia, and out the doors after you */
+function updateAttorneyConv(dt, s2) {
+  const n = gonzoC;
+  if (seminar.seated) {
+    n.pose = 'sit'; n.turns = false;
+    n.group.position.set(CONV_X + CONV.seat.x + 0.75, 0, CONV.seat.z);
+    n.group.rotation.y = Math.PI;
+    n.homeYaw = Math.PI;
+    // he reacts to the slides: badly
+    if (Math.random() < dt * 0.12) n.gesture(['laugh', 'shake', 'point', 'lean'][Math.floor(Math.random() * 4)], 1.8);
+    return;
+  }
+  n.pose = 'stand'; n.turns = true;
+  // at the urn with the delegate from Georgia until that is done
+  if (game.taskState('georgia') === 'active') {
+    n.homeYaw = Math.atan2(georgiaDA.group.position.x - n.group.position.x,
+      georgiaDA.group.position.z - n.group.position.z);
+    atty.trail.length = 0;
+    return;
+  }
+  follow(n, dt);
+  bark('conv', s2, dt);
+}
+/* the last morning: in the passenger seat of whichever car is showing */
+function updateCarAttorney(dt, s2) {
+  const want = game.finale && game.taskState('westward') !== 'done';
+  const host = car.stage ? desert.car : hotelCar;
+  if (want && carGonzo.group.parent !== host) host.add(carGonzo.group);
+  carGonzo.group.visible = want && host.visible !== false;
+  if (!carGonzo.group.visible) return;
+  // he watches the road, and you when he is talking to you
+  if (carGonzo.speaking) carGonzo.lookTarget = camera.position;
+  else {
+    carGonzo.group.getWorldPosition(_ahead);
+    const h = host.rotation.y;
+    _ahead.x -= Math.sin(h) * 20; _ahead.z -= Math.cos(h) * 20;
+    carGonzo.lookTarget = _ahead;
+  }
+  carGonzo.update(clock, s2, player.pos, false);
+  if (car.stage && car.final) bark('car', s2, dt);
+}
+const _ahead = new THREE.Vector3();
+
+/* ------------------------------------------------ who is talking
+   The dialogue and the subtitles know WHO is speaking only by name; this
+   turns that into a person, so the right mouth moves, the right hands go,
+   and whoever is being spoken to listens (and nods). A line can ask for a
+   gesture by name; otherwise one is picked now and then so nobody just
+   stands there. */
+const DLG_SPEAKER = {
+  clerk: () => npcs[0], bill: () => npcs[0], dealer: () => npcs[1], attorney: () => npcs[2],
+  security: () => npcs[3], valet: () => npcs[4], gonzo: () => gonzo, maid: () => maid,
+  registrar: () => registrar, lecturer: () => keynote, georgia: () => georgiaDA, chp: () => patrolman,
+  gonzo4: () => gonzoC, gonzo5: () => gonzoC,
+};
+const EVERYONE = [...npcs, gonzo, maid, ...convCast, carGonzo, patrolman];
+let lastDlg = null, talkNode = null, talkT = 0, talkFor = 0;
+function updateSpeakers() {
+  EVERYONE.forEach((n) => { n.speaking = false; n.listening = false; });
+  const d = game.dlg;
+  const a = attorneyHere();
+  if (d && d.node) {
+    const partner = DLG_SPEAKER[d.who] ? DLG_SPEAKER[d.who]() : null;
+    const who = /ATTORNEY/.test(d.node.who) ? a : partner;
+    if (d.node !== talkNode) {
+      talkNode = d.node; talkT = clock;
+      talkFor = Math.min(4.5, 0.9 + (d.node.line || '').length * 0.04);
+      if (who) {
+        if (d.node.gesture) who.gesture(d.node.gesture, 1.8);
+        else if (Math.random() < 0.4) who.gesture(['nod', 'shrug', 'hands', 'point'][Math.floor(Math.random() * 4)], 1.6);
+      }
+    }
+    if (who) { who.speaking = clock - talkT < talkFor; who.listening = !who.speaking; }
+    if (partner && partner !== who) partner.listening = true;
+    // your attorney, if he is with you, listens in and watches whoever it is
+    if (a && a !== who && a !== carGonzo) {
+      a.listening = true;
+      a.lookTarget = who ? who.group.getWorldPosition(_spk) : null;
+    }
+    lastDlg = d.who;
+  } else {
+    talkNode = null;
+    if (a && a !== carGonzo) a.lookTarget = null;
+    // lastDlg holds the conversation that just ended for exactly one frame
+    if (lastDlg && lastDlgSeen) lastDlg = null;
+  }
+  lastDlgSeen = !d;
+  // subtitles with a name on them
+  if (game.sayWho && game._sayTimer > 0) {
+    const n = game.sayWho === 'YOUR ATTORNEY' ? a : game.sayWho === keynote.name ? keynote : null;
+    if (n) n.speaking = true;
+  }
+}
+let lastDlgSeen = false;
+const _spk = new THREE.Vector3();
+
 /* The maid. She arrives when the bath is settled, knocks, stands in the
    open door until she is dealt with -- and then she walks off down the
    corridor and the door swings shut. She used to stay where she was for
@@ -2296,16 +2552,12 @@ function updateMaid(dt, s) {
     // turn to face down the corridor, then walk
     st.t += dt;
     const g = maid.group;
-    const want = Math.PI;                       // -Z... +Z is 0; she heads for -Z
-    g.rotation.y += (want - g.rotation.y) * (1 - Math.pow(0.001, dt));
     if (st.t > 0.5) {
       // step out of the doorway first, then along the hall to the lifts
       if (g.position.x > SUITE_X - 7.2) g.position.x -= 1.3 * dt;
       else g.position.z -= 1.4 * dt;
     }
-    const sw = Math.sin(st.t * 7) * 0.4;
-    maid.arms[0].rotation.x = sw; maid.arms[1].rotation.x = -sw;
-    g.position.y = Math.abs(Math.sin(st.t * 7)) * 0.03;
+    maid.update(clock, s, player.pos, false);
     if (g.position.z < SUITE.liftCall.z + 0.5 || st.t > 14) {
       // and she is gone into the lift
       st.phase = 'gone';
@@ -2421,10 +2673,12 @@ function tick(dt, draw = true) {
   game.update(dt);
 
   const s2 = game.snapshot();
+  updateSpeakers();
 
   if (game.act === 1) {
     // the bar he works behind is turning. He does not turn with it any more.
     world.update(clock, s2, player.pos);
+    updateAttorneyFloor(dt, s2);
     npcs.forEach((n) => n.update(clock, s2, player.pos, focusTarget?.obj === n));
     crowd.update(clock, s2, player.pos, dt, world.carousel.rotation.y);
     ghosts.forEach((g) => g.update(clock, s2));
@@ -2451,17 +2705,15 @@ function tick(dt, draw = true) {
     const dp = suite.doorPivot;
     dp.rotation.y += (doorWant - dp.rotation.y) * (1 - Math.pow(0.02, dt));
   } else if (game.act === 4) {
+    updateAttorneyConv(dt, s2);
     convCast.forEach((n) => {
-      if (n === georgiaDA && game.taskState('georgia') === 'done') return;
+      if (!n.group.visible) return;
       n.update(clock, s2, player.pos, focusTarget?.obj === n);
     });
     if (game.taskState('georgia') === 'done' && !game.dlg && georgiaDA.group.visible) {
       const g = georgiaDA.group, W = GEORGIA_OUT[georgiaWalk.leg];
       const dx = W.x - g.position.x, dz = W.z - g.position.z, d = Math.hypot(dx, dz);
       georgiaWalk.t += dt;
-      g.rotation.y = Math.atan2(dx, dz);
-      const sw = Math.sin(georgiaWalk.t * 7) * 0.4;
-      georgiaDA.arms[0].rotation.x = sw; georgiaDA.arms[1].rotation.x = -sw;
       if (d < 0.2) {
         if (++georgiaWalk.leg >= GEORGIA_OUT.length) g.visible = false;
       } else {
@@ -2510,6 +2762,9 @@ function tick(dt, draw = true) {
     }
   }
 
+  updateCarAttorney(dt, s2);
+  if (patrolman.group.visible) patrolman.update(clock, s2, player.pos, false);
+
   findFocus();
   updateObjective();
   audio.update(s2, dt);
@@ -2546,6 +2801,9 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       carAt: [+car.pos.x.toFixed(2), +car.pos.z.toFixed(2)], desertAt: [+DESERT_X.toFixed(2), +DESERT_Z.toFixed(2)],
       cop: [cop.state, +(-(car.pos.z - DESERT_Z) - cop.s).toFixed(1)],
       mint: mintOn ? [+mintT.toFixed(1), (game.mintSeen || []).length, +mint.fog.density.toFixed(3)] : null,
+      atty: [atty.with, +npcs[2].group.position.x.toFixed(2), +npcs[2].group.position.z.toFixed(2), +npcs[2].speed.toFixed(2)],
+      attyConv: [+gonzoC.group.position.x.toFixed(2), +gonzoC.group.position.z.toFixed(2), gonzoC.pose],
+      patrol: [patrolman.group.visible, +patrolman.speed.toFixed(2)],
       cam: [+camera.fov.toFixed(1), +camera.rotation.z.toFixed(3), +head.yaw.toFixed(2)],
       phantom: phantom.active, bats: roadBats.points.visible,
       // what a screenshot needs to know: is the picture mid-cut to black
@@ -2586,6 +2844,7 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       if (c.freeze) game.dlg && (game.dlg.t = 9999);   // stop the timer while testing
       if (c.act3) { if (!car.stage) getInCar(); }
       if (c.mint && game.act === 2 && !mintOn) startMint();
+      if (c.sit && game.act === 4) { game.completeTask('badge'); sitDown(); }
       // the car, anywhere down the road, at any speed (the long drive, skipped)
       if (c.carTo !== undefined && car.stage) {
         roadPoint(c.carTo, c.carLat ?? 1.6, tp);

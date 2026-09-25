@@ -169,6 +169,7 @@ const DIALOGUE = {
     start: 'c0',
     nodes: {
       c0: {
+        gesture: 'writes',
         who: 'SWAN — NIGHT DESK',
         line: 'You’ll be checking in. I need a name, and I need you to stop swaying.',
         time: 9,
@@ -183,6 +184,7 @@ const DIALOGUE = {
         ],
       },
       c1: {
+        gesture: 'point',
         who: 'SWAN — NIGHT DESK',
         line: 'Room 1850. The elevators are past the floor. The bellman is — unavailable tonight.',
         time: 7,
@@ -202,6 +204,7 @@ const DIALOGUE = {
         ],
       },
       c2: {
+        gesture: 'point',
         who: 'SWAN — NIGHT DESK',
         line: 'Sir, there are four hundred district attorneys in this building. Please take your key.',
         time: 6,
@@ -210,6 +213,7 @@ const DIALOGUE = {
         ],
       },
       cBad: {
+        gesture: 'recoil',
         who: 'SWAN — NIGHT DESK',
         line: 'I am going to pretend you said something else. Do you want the room or not.',
         time: 6,
@@ -220,6 +224,7 @@ const DIALOGUE = {
         ],
       },
       cStare: {
+        gesture: 'shrug',
         who: 'SWAN — NIGHT DESK',
         line: '… Sir. Sir. There is a line behind you.',
         time: 5,
@@ -237,6 +242,7 @@ const DIALOGUE = {
     start: 'd0',
     nodes: {
       d0: {
+        gesture: 'lean',
         who: 'THE MAN AT THE BAR',
         line: 'You’re not police. Police stand better than that. So what is it.',
         time: 9,
@@ -256,6 +262,7 @@ const DIALOGUE = {
         ],
       },
       d1: {
+        gesture: 'hands',
         who: 'THE MAN AT THE BAR',
         line: 'You understand where it comes from. It isn’t brewed. It comes out of a person, and the person has to be having a bad time.',
         time: 10,
@@ -266,6 +273,7 @@ const DIALOGUE = {
         ],
       },
       d2: {
+        gesture: 'point',
         who: 'THE MAN AT THE BAR',
         line: 'Take it. And listen — your lawyer came through here dragging a briefcase and left without it. It’s still out on the floor. You won’t see it with those eyes.',
         time: 10,
@@ -285,6 +293,7 @@ const DIALOGUE = {
     start: 'a0',
     nodes: {
       a0: {
+        gesture: 'laugh',
         who: 'YOUR ATTORNEY',
         line: 'There you are. I’ve been explaining to the carpet that we are professionals. It isn’t listening.',
         time: 10,
@@ -298,6 +307,7 @@ const DIALOGUE = {
         ],
       },
       a1: {
+        gesture: 'shrug',
         who: 'YOUR ATTORNEY',
         line: 'On the floor. I set it down and it stopped existing, which is a legal grey area. You’ll see it when your eyes are correct.',
         time: 9,
@@ -307,6 +317,7 @@ const DIALOGUE = {
         ],
       },
       a2: {
+        gesture: 'hands',
         who: 'YOUR ATTORNEY',
         line: 'I am tremendous. Here. You look like a man who needs the edge taken off before he talks to anyone.',
         time: 8,
@@ -316,6 +327,7 @@ const DIALOGUE = {
         ],
       },
       a3: {
+        gesture: 'point',
         who: 'YOUR ATTORNEY',
         line: 'Purple, my friend. The purple one. Take it standing on the casino floor and look down.',
         time: 9,
@@ -337,6 +349,7 @@ const DIALOGUE = {
     start: 'g0',
     nodes: {
       g0: {
+        gesture: 'point',
         who: 'YOUR ATTORNEY',
         line: 'There you are. Listen. When the song peaks -- and you will know the '
             + 'moment -- I want you to throw that machine into the tub with me.',
@@ -351,6 +364,7 @@ const DIALOGUE = {
         ],
       },
       g1: {
+        gesture: 'fist',
         who: 'YOUR ATTORNEY',
         line: 'You are a coward and a bad journalist. Fine. Then at least throw '
             + 'something. The moment is coming whether you participate or not.',
@@ -362,6 +376,7 @@ const DIALOGUE = {
         ],
       },
       g2: {
+        gesture: 'hands',
         who: 'YOUR ATTORNEY',
         line: 'Because it has the whole trip on it and I would like the whole trip '
             + 'to go at once. Tidy. Journalistically tidy.',
@@ -372,6 +387,7 @@ const DIALOGUE = {
         ],
       },
       g3: {
+        gesture: 'splash',
         who: 'YOUR ATTORNEY',
         line: 'It hits the water like a body and he goes under and comes up howling '
             + 'and entirely alive, and the tape is still dry on the cistern.',
@@ -384,6 +400,7 @@ const DIALOGUE = {
         ],
       },
       g4: {
+        gesture: 'shake',
         who: 'YOUR ATTORNEY',
         line: '... You have taken the moment away from me. I want that on record. '
             + 'I want it on the record that you took the moment.',
@@ -396,6 +413,7 @@ const DIALOGUE = {
         ],
       },
       g5: {
+        gesture: 'shrug',
         who: 'YOUR ATTORNEY',
         line: 'Shut it then. Shut it and listen to me not stop.',
         time: 6,
@@ -407,6 +425,7 @@ const DIALOGUE = {
         ],
       },
       gBad: {
+        gesture: 'recoil',
         who: 'YOUR ATTORNEY',
         line: 'The machine goes in. Everything stops. Then he sits up out of the water '
             + 'holding it and looks at you like you have finally told him the truth.',
@@ -428,6 +447,7 @@ const DIALOGUE = {
     start: 'm0',
     nodes: {
       m0: {
+        gesture: 'recoil',
         who: 'HOUSEKEEPING',
         line: 'Sir -- I am so sorry -- the door was -- is everything all right in here.',
         time: 9,
@@ -441,6 +461,7 @@ const DIALOGUE = {
         ],
       },
       m1: {
+        gesture: 'hands',
         who: 'HOUSEKEEPING',
         line: 'Oh -- oh, thank God. There has been a man in the pool all week and '
             + 'nobody will say anything about it. Should I be writing things down?',
@@ -455,6 +476,7 @@ const DIALOGUE = {
         ],
       },
       m2: {
+        gesture: 'nod',
         who: 'HOUSEKEEPING',
         line: 'Of course. Of course. I will -- yes. Good night, sir.',
         time: 6,
@@ -465,6 +487,7 @@ const DIALOGUE = {
         ],
       },
       m3: {
+        gesture: 'shake',
         who: 'HOUSEKEEPING',
         line: 'She looks past you at the room for a long time and then decides, very '
             + 'carefully, that she has seen nothing at all.',
@@ -483,6 +506,7 @@ const DIALOGUE = {
     start: 's0',
     nodes: {
       s0: {
+        gesture: 'cross',
         who: 'HOUSE SECURITY',
         line: 'Guests only past this point. Room number.',
         time: 8,
@@ -497,6 +521,7 @@ const DIALOGUE = {
         ],
       },
       s1: {
+        gesture: 'point',
         who: 'HOUSE SECURITY',
         line: 'Elevators are behind me. Keep your hands where the cameras can find them.',
         time: 6,
@@ -570,6 +595,7 @@ const DIALOGUE = {
     start: 'h0',
     nodes: {
       h0: {
+        gesture: 'point',
         who: 'THE HIGHWAY PATROLMAN',
         line: 'Morning. You stopped faster than anybody I have ever seen stop. '
             + 'Do you know how fast you were going before that?',
@@ -584,6 +610,7 @@ const DIALOGUE = {
         ],
       },
       h1: {
+        gesture: 'writes',
         who: 'THE HIGHWAY PATROLMAN',
         line: 'He reads the licence for a long time. "Long night, Mr. Duke? There is a '
             + 'rest area twelve miles on. You are going to sleep in it. That is not a suggestion."',
@@ -594,6 +621,7 @@ const DIALOGUE = {
         ],
       },
       h2: {
+        gesture: 'writes',
         who: 'THE HIGHWAY PATROLMAN',
         line: '"You would have won." He very nearly smiles. "That is the problem. '
             + 'That is why I am writing you up."',
@@ -604,6 +632,7 @@ const DIALOGUE = {
         ],
       },
       hBad: {
+        gesture: 'recoil',
         who: 'THE HIGHWAY PATROLMAN',
         line: 'He looks at the can. He looks at the seat, and at what is on the seat. '
             + '"Sir, I want you to--" His radio says something about a pile-up forty miles back.',
@@ -614,6 +643,7 @@ const DIALOGUE = {
         ],
       },
       hStare: {
+        gesture: 'hands',
         who: 'THE HIGHWAY PATROLMAN',
         line: '"Sir. Sir. Look at me." You look at him. It does not seem to help either of you.',
         time: 8,
@@ -633,6 +663,7 @@ const DIALOGUE = {
     start: 'v0',
     nodes: {
       v0: {
+        gesture: 'point',
         who: 'THE PARKING ATTENDANT',
         line: 'The red one on the kerb. That is yours. I parked around it, sir. '
             + 'I’ll remember your face.',
@@ -656,6 +687,7 @@ const DIALOGUE = {
     start: 'r0',
     nodes: {
       r0: {
+        gesture: 'writes',
         who: 'REGISTRATION',
         line: 'Name and jurisdiction, please. The badge goes on the lapel, sir, '
             + 'not the forehead.',
@@ -670,6 +702,7 @@ const DIALOGUE = {
         ],
       },
       r1: {
+        gesture: 'hands',
         who: 'REGISTRATION',
         line: 'Los Angeles. You people must be seeing all of it out there. Enjoy '
             + 'the keynote -- it is standing room only at the back.',
@@ -681,6 +714,7 @@ const DIALOGUE = {
         ],
       },
       r2: {
+        gesture: 'writes',
         who: 'REGISTRATION',
         line: 'She writes NARCOTICS in capitals, looks at it, and hands it over '
             + 'with a small respectful nod, as if it were a rank.',
@@ -691,6 +725,7 @@ const DIALOGUE = {
         ],
       },
       r3: {
+        gesture: 'shrug',
         who: 'REGISTRATION',
         line: 'And he is -- ? He says he is your attorney. Your attorney says a '
             + 'great many things. Here. Just -- here.',
@@ -720,6 +755,7 @@ const DIALOGUE = {
     start: 'z0',
     nodes: {
       z0: {
+        gesture: 'laugh',
         who: 'YOUR ATTORNEY',
         line: 'Look at them. Four hundred cops and not one of them has ever been '
             + 'high. I checked the badges. You are going to want something for the '
@@ -737,6 +773,7 @@ const DIALOGUE = {
         ],
       },
       z1: {
+        gesture: 'shake',
         who: 'YOUR ATTORNEY',
         line: 'Ninety minutes on the drug menace, by a man who has read about it. '
             + 'Sit on the aisle. If I stand up, you stand up.',
@@ -747,6 +784,7 @@ const DIALOGUE = {
         ],
       },
       z2: {
+        gesture: 'point',
         who: 'YOUR ATTORNEY',
         line: 'At the back, by the coffee. There is a man from Georgia there who '
             + 'wants to know what is really going on in California, and I am '
@@ -762,6 +800,7 @@ const DIALOGUE = {
     start: 'y0',
     nodes: {
       y0: {
+        gesture: 'hands',
         who: 'YOUR ATTORNEY',
         line: 'He is ready. I have told him nothing. I have only implied. Go on -- '
             + 'he wants to hear it from a man who has seen it.',
@@ -784,6 +823,7 @@ const DIALOGUE = {
     start: 'q0',
     nodes: {
       q0: {
+        gesture: 'point',
         who: 'DR. BUMQUIST',
         line: 'You, sir. On the aisle, with the -- yes. You look like a man who has been '
             + 'in the field. Why do you suppose they call it a roach?',
@@ -798,6 +838,7 @@ const DIALOGUE = {
         ],
       },
       q1: {
+        gesture: 'hands',
         who: 'DR. BUMQUIST',
         line: 'A murmur. Four hundred heads turn a degree toward you. "That is a very '
             + 'interesting answer," he says slowly, and writes something down.',
@@ -807,6 +848,7 @@ const DIALOGUE = {
         ],
       },
       q2: {
+        gesture: 'point',
         who: 'DR. BUMQUIST',
         line: 'Exactly right. Exactly. It resembles a cockroach. That, gentlemen, is the '
             + 'kind of thinking we need in this room.',
@@ -826,6 +868,7 @@ const DIALOGUE = {
         ],
       },
       q3: {
+        gesture: 'laugh',
         who: 'DR. BUMQUIST',
         line: 'Laughter -- the good kind. He points at you like you are in on it with him, '
             + 'and for about a second, you are.',
@@ -846,6 +889,7 @@ const DIALOGUE = {
     start: 'e0',
     nodes: {
       e0: {
+        gesture: 'shrug',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'You boys come in from the coast? Your friend here says you have seen '
             + 'some things out there. Things they do not put in the literature.',
@@ -860,6 +904,7 @@ const DIALOGUE = {
         ],
       },
       e1: {
+        gesture: 'shake',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'Off the desert? Who does?',
         time: 8,
@@ -872,6 +917,7 @@ const DIALOGUE = {
         ],
       },
       e2: {
+        gesture: 'recoil',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'Lord have mercy. What is it they want?',
         time: 8,
@@ -882,6 +928,7 @@ const DIALOGUE = {
         ],
       },
       e3: {
+        gesture: 'recoil',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'He puts his coffee down very carefully on the wrong side of the saucer, '
             + 'and looks out through the glass at the parking lot for a long, long time.',
@@ -895,6 +942,7 @@ const DIALOGUE = {
         ],
       },
       eGonzo: {
+        gesture: 'recoil',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'Your attorney leans in: "Tell him about the heads." The delegate looks '
             + 'from him to you and back, waiting.',
@@ -906,6 +954,7 @@ const DIALOGUE = {
         ],
       },
       eCalm: {
+        gesture: 'shrug',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'Kids. Huh. Well, that is not what they are telling us in there.',
         time: 7,
@@ -915,6 +964,7 @@ const DIALOGUE = {
         ],
       },
       eDry: {
+        gesture: 'shake',
         who: 'THE DELEGATE FROM GEORGIA',
         line: 'He decides you are both some kind of Californian joke he is not in on, '
             + 'and turns back to the urn.',
@@ -934,6 +984,7 @@ const DIALOGUE = {
     start: 'b0',
     nodes: {
       b0: {
+        gesture: 'writes',
         who: 'SWAN — THE DESK',
         line: 'Mr. Duke. You are checking out. There are some charges on 1850 -- room '
             + 'service, mostly, and there is a note here about the bathroom that I am '
@@ -950,6 +1001,7 @@ const DIALOGUE = {
         ],
       },
       bPaid: {
+        gesture: 'writes',
         who: 'SWAN — THE DESK',
         line: 'She counts it twice, slowly, the way you count something you did not '
             + 'expect to exist. "Thank you for staying with us, Mr. Duke."',
@@ -958,6 +1010,7 @@ const DIALOGUE = {
           effect: { complete: 'bill', flag: 'billPaid', pay: 450, fear: -0.1 }, end: true }],
       },
       bMag: {
+        gesture: 'writes',
         who: 'SWAN — THE DESK',
         line: 'She writes the name of the magazine on the bill very neatly and '
             + 'underlines it twice, and you understand that somebody in an office is '
@@ -966,6 +1019,7 @@ const DIALOGUE = {
         options: [{ text: '[thank her]', effect: { complete: 'bill', flag: 'billMag' }, end: true }],
       },
       bAtty: {
+        gesture: 'point',
         who: 'SWAN — THE DESK',
         line: 'She looks past you at the glass doors. Out on the kerb your attorney is '
             + 'already in the car with the engine running, waving at nobody.',
@@ -974,6 +1028,7 @@ const DIALOGUE = {
           effect: { complete: 'bill', flag: 'billAtty', fear: 0.05 }, end: true }],
       },
       bRun: {
+        gesture: 'hands',
         who: 'SWAN — THE DESK',
         line: '"Mr. Duke? Sir. Sir --" and then nothing at all, which is somehow worse. '
             + 'The glass doors are forty feet away and every one of them is a mile.',
@@ -2126,6 +2181,8 @@ export class Game {
   /* ============================================== presentation */
 
   say(text, who, secs = 4.2) {
+    // who is saying it, so the right person's mouth moves (main.js)
+    this.sayWho = who || null;
     const el = this.el.subtitle;
     el.innerHTML = (who ? `<span class="who">${who}</span>` : '') + this._esc(text);
     el.classList.remove('hidden');
