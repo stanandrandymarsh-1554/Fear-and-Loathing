@@ -458,6 +458,49 @@ export class Audio {
     });
   }
 
+  /** a two-stroke going past in the dust: a rasp that drops as it goes */
+  bike(vol = 0.06, pan = 0) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(210, t);
+    o.frequency.linearRampToValueAtTime(230, t + 0.5);
+    o.frequency.linearRampToValueAtTime(150, t + 1.1);
+    // the rasp: the pitch shaken fast
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 38;
+    const amt = ctx.createGain(); amt.gain.value = 14;
+    lfo.connect(amt); amt.connect(o.frequency);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    o.connect(bp); bp.connect(g); g.connect(p); p.connect(this.bus);
+    o.start(t); o.stop(t + 1.45); lfo.start(t); lfo.stop(t + 1.45);
+  }
+
+  /** a highway patrol siren: one long wail, up and back down */
+  siren(vol = 0.08, pan = 0) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.linearRampToValueAtTime(1250, t + 0.9);
+    o.frequency.linearRampToValueAtTime(620, t + 1.8);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.08);
+    g.gain.setValueAtTime(vol, t + 1.7);
+    g.gain.linearRampToValueAtTime(0.0001, t + 1.85);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    o.connect(lp); lp.connect(g); g.connect(p); p.connect(this.bus);
+    o.start(t); o.stop(t + 1.9);
+  }
+
   door() { this._burst(140, 0.7, 1.2, 0.14, 'lowpass'); this._blip(90, 0.4, 'sine', 0.1); }
 
   /** twice, politely, which is worse */

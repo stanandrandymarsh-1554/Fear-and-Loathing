@@ -54462,6 +54462,49 @@ class Audio {
     });
   }
 
+  /** a two-stroke going past in the dust: a rasp that drops as it goes */
+  bike(vol = 0.06, pan = 0) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(210, t);
+    o.frequency.linearRampToValueAtTime(230, t + 0.5);
+    o.frequency.linearRampToValueAtTime(150, t + 1.1);
+    // the rasp: the pitch shaken fast
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 38;
+    const amt = ctx.createGain(); amt.gain.value = 14;
+    lfo.connect(amt); amt.connect(o.frequency);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    o.connect(bp); bp.connect(g); g.connect(p); p.connect(this.bus);
+    o.start(t); o.stop(t + 1.45); lfo.start(t); lfo.stop(t + 1.45);
+  }
+
+  /** a highway patrol siren: one long wail, up and back down */
+  siren(vol = 0.08, pan = 0) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.linearRampToValueAtTime(1250, t + 0.9);
+    o.frequency.linearRampToValueAtTime(620, t + 1.8);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.08);
+    g.gain.setValueAtTime(vol, t + 1.7);
+    g.gain.linearRampToValueAtTime(0.0001, t + 1.85);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    o.connect(lp); lp.connect(g); g.connect(p); p.connect(this.bus);
+    o.start(t); o.stop(t + 1.9);
+  }
+
   door() { this._burst(140, 0.7, 1.2, 0.14, 'lowpass'); this._blip(90, 0.4, 'sine', 0.1); }
 
   /** twice, politely, which is worse */
@@ -57848,8 +57891,8 @@ function hill(x, z) {
     + 22 * Math.abs(Math.sin(x / 41 - z / 57));
   const range = sm(140, 460, d) * (1 - 0.55 * sm(700, 900, Math.abs(x)));
   const ahead = sm(L + 250, L + 800, s) * (90 + 40 * Math.sin(x / 70));
-  // the motel and its lot sit on level ground, west of the road
-  const lot = sm(45, 95, Math.hypot(x + 12, s - L));
+  // Baker -- the motel, the gas station and their lots -- sits on level ground
+  const lot = sm(55, 105, Math.hypot(x + 4, s - L));
   return town * lot * (sm(20, 60, d) * roll + range * ridge) + ahead;
 }
 function groundY(x, z) {
@@ -58038,7 +58081,10 @@ function buildDesert(scene) {
       // the desert starts where the town gives out
       const s = TOWN.s1 + 40 + rnd() * (L - TOWN.s1);
       const side = rnd() > 0.5 ? 1 : -1;
-      const lat = side * (near + Math.pow(rnd(), 1.6) * (far - near));
+      let lat = side * (near + Math.pow(rnd(), 1.6) * (far - near));
+      // nothing grows on the lots at Baker; move it out past them instead
+      // (moved, not dropped, so the rest of the desert comes out the same)
+      if (s > L - 70 && lat > -46 && lat < 36) lat += side * 46;
       at(s, lat, 0);
       const x = place.position.x, z = place.position.z;
       fn(i, x, groundY(x, z), z);
@@ -58177,64 +58223,121 @@ function buildDesert(scene) {
   sky.renderOrder = -1;
   group.add(sky);
 
-  /* ---------------------------------------------- the motel at the end
-     Baker, where the film's phone booth is. The road is straight and level
-     here, so nothing below needs to know the road ever bent. */
+  /* ---------------------------------------------- Baker, at the end
+     A wide place in the road: a motor lodge on the left, a gas station on
+     the right, and the payphone at the edge of the motel lot where a car
+     can pull onto the gravel next to it. The road is straight and level
+     here, so nothing below needs to know it ever bent. Everything is kept
+     clear of the tarmac and its shoulder (|x| < 7.6); the phone booth used
+     to stand in the southbound lane. */
   const end = -L;
   const motel = new THREE.Group();
   motel.position.set(0, 0, end);
   group.add(motel);
+  const put = (geo, m, x, y, z, parent = motel) => {
+    const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o;
+  };
+  const stucco = mat({ color: 0xe0cfae, roughness: 0.92 });
+  const trimM = mat({ color: 0x2f6f73, roughness: 0.7 });
+  const white = mat({ color: 0xece6d8, roughness: 0.6 });
+  const concrete = mat({ color: 0xb9b2a4, roughness: 1 });
+  const gravel = mat({ color: 0xa88e6c, roughness: 1 });
+  const glassM = mat({ color: 0x5d7684, roughness: 0.15, metalness: 0.3 });
+  const litM = basic({ color: 0xffe2a8 });
 
-  const blockMat = mat({ color: 0x8d7a5e, roughness: 0.95 });
-  const block = new THREE.Mesh(new THREE.BoxGeometry(26, 4.2, 9), blockMat);
-  block.position.set(-16, 2.1, -10);
-  motel.add(block);
-  // a row of doors, because a motel is a row of doors
-  const doorMat = mat({ color: 0x2f4d52, roughness: 0.7 });
+  // the lots: gravel on the motel side, concrete on the gas station's
+  const flat = (w, d, m, x, z, y = 0.012) => {
+    const o = put(new THREE.PlaneGeometry(w, d), m, x, y, z);
+    o.rotation.x = -Math.PI / 2; return o;
+  };
+  flat(34, 34, gravel, -25, -2);
+  flat(26, 26, concrete, 21, -3);
+
+  /* the MOTOR LODGE: a row of rooms under a flat roof that runs out over a
+     walkway on posts, a door and a window for every room, and the office
+     at the end nearest the road with its light on */
+  const MX = -27, MZ = -14;                       // middle of the room block
+  put(new THREE.BoxGeometry(26, 3.6, 8), stucco, MX, 1.8, MZ);
+  put(new THREE.BoxGeometry(27.5, 0.4, 11.2), white, MX, 3.8, MZ + 1.6);      // the roof
+  put(new THREE.BoxGeometry(27.5, 0.5, 0.2), trimM, MX, 3.75, MZ + 7.2);      // its fascia
+  flat(26, 3.2, concrete, MX, MZ + 5.6, 0.03);                                // the walkway
+  for (let i = 0; i < 8; i++) put(new THREE.BoxGeometry(0.16, 3.6, 0.16), white, MX - 12.6 + i * 3.6, 1.8, MZ + 7);
   for (let i = 0; i < 7; i++) {
-    const d = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.2, 0.16), doorMat);
-    d.position.set(-27 + i * 3.6, 1.1, -5.6);
-    motel.add(d);
+    const x = MX - 11 + i * 3.6, fz = MZ + 4.02;
+    put(new THREE.BoxGeometry(1.0, 2.15, 0.08), trimM, x, 1.08, fz);
+    // a window with the curtains drawn; a couple of them have somebody up
+    const w = put(new THREE.PlaneGeometry(1.3, 0.9), i === 2 || i === 5 ? litM : glassM, x + 1.4, 1.6, fz + 0.01);
+    w.userData.win = true;
   }
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(26, 0.3, 2.4),
-    mat({ color: 0x6b3b2a, roughness: 0.9 }));
-  canopy.position.set(-16, 2.9, -4.6);
-  motel.add(canopy);
-  // a gravel lot in front of it
-  const lot = new THREE.Mesh(new THREE.PlaneGeometry(40, 22), mat({ color: 0x9a8062, roughness: 1 }));
-  lot.rotation.x = -Math.PI / 2;
-  lot.position.set(-14, 0.004, -2);
-  motel.add(lot);
+  // the office, closest to the road, with a window you can see into
+  put(new THREE.BoxGeometry(5, 3.4, 7), stucco, -11.5, 1.7, -12);
+  put(new THREE.BoxGeometry(5.8, 0.35, 7.8), white, -11.5, 3.55, -12);
+  put(new THREE.PlaneGeometry(3.2, 1.4), litM, -8.99, 1.7, -12.4).rotation.y = Math.PI / 2;
+  put(new THREE.BoxGeometry(0.08, 2.15, 1.0), trimM, -8.98, 1.08, -9.6);
+  const officeSign = put(new THREE.PlaneGeometry(2.6, 0.6),
+    basic({ map: neonTexture([['OFFICE', '#ff6a2d']], 256, 60), transparent: true }), -8.95, 3.0, -12.4);
+  officeSign.rotation.y = Math.PI / 2;
+  // somebody's station wagon, which has not moved since Tuesday
+  const wagon = makeVehicle('wagon', 0x7a6a4a);
+  wagon.position.set(-24, 0, -4.5);
+  wagon.rotation.y = 0.05;
+  motel.add(wagon);
 
   // the sign, which is the only thing awake
-  const signPost = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9, 0.5),
-    mat({ color: 0x4a3a2a, roughness: 0.9 }));
-  signPost.position.set(9, 4.5, -2);
-  motel.add(signPost);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 3.2),
-    basic({ map: motelSignTexture(), transparent: true }));
-  sign.position.set(9, 8.4, -2);
-  motel.add(sign);
+  const signPost = put(new THREE.BoxGeometry(0.5, 9, 0.5), mat({ color: 0x4a3a2a, roughness: 0.9 }), -9.5, 4.5, 8);
+  const sign = put(new THREE.PlaneGeometry(7.5, 3.2), basic({ map: motelSignTexture(), transparent: true }), -9.5, 8.4, 8);
   const signBack = sign.clone();
   signBack.rotation.y = Math.PI;
   motel.add(signBack);
-
-  const signLight = new THREE.PointLight(0xff6a2d, 60, 0, 2);
-  signLight.position.set(9, 8.4, 0);
+  const signLight = new THREE.PointLight(0xff6a2d, 40, 0, 2);
+  signLight.position.set(-9.5, 8.4, 10);
   motel.add(signLight);
 
-  /* the payphone, which is the reason any of this is happening */
-  const boothMat = mat({ color: 0x1d3f56, roughness: 0.5, metalness: 0.3 });
-  const booth = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.3, 0.9), boothMat);
-  booth.position.set(3.2, 1.15, -3.4);
+  /* the payphone, which is the reason any of this is happening: an
+     aluminium box with glass sides at the edge of the lot, its door toward
+     the road, the handset on the back wall and a light in the roof */
+  const PX = -9.4, PZ = -1.5;
+  const booth = new THREE.Group();
+  booth.position.set(PX, 0, PZ);
   motel.add(booth);
-  const phoneFace = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2),
-    mat({ color: 0x141414, roughness: 0.6 }));
-  phoneFace.position.set(3.2, 1.45, -2.92);
-  motel.add(phoneFace);
-  const boothLight = new THREE.PointLight(0xbfe4ff, 14, 0, 2);
-  boothLight.position.set(3.2, 2.5, -3.0);
+  const alu = mat({ color: 0xc9ccc8, roughness: 0.35, metalness: 0.4 });
+  [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].forEach(([dx, dz]) =>
+    put(new THREE.BoxGeometry(0.08, 2.3, 0.08), alu, dx, 1.15, dz, booth));
+  put(new THREE.BoxGeometry(1.1, 0.22, 1.1), alu, 0, 2.4, 0, booth);
+  const pane = mat({ color: 0xbcd8e4, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.28, depthWrite: false });
+  put(new THREE.BoxGeometry(0.02, 2.1, 1.0), pane, 0.5, 1.15, 0, booth);     // the door, facing the road
+  put(new THREE.BoxGeometry(1.0, 2.1, 0.02), pane, 0, 1.15, 0.5, booth);
+  put(new THREE.BoxGeometry(1.0, 2.1, 0.02), pane, 0, 1.15, -0.5, booth);
+  put(new THREE.BoxGeometry(0.06, 2.1, 1.0), alu, -0.5, 1.15, 0, booth);     // the back wall
+  put(new THREE.BoxGeometry(0.16, 0.7, 0.42), mat({ color: 0x141414, roughness: 0.6 }), -0.4, 1.4, 0, booth);
+  const phoneSign = put(new THREE.BoxGeometry(1.12, 0.22, 1.12),
+    basic({ map: neonTexture([['TELEPHONE', '#5ab4ff']], 256, 48) }), 0, 2.62, 0, booth);
+  phoneSign.userData.sign = true;
+  const boothLight = new THREE.PointLight(0xbfe4ff, 2.5, 0, 2);
+  boothLight.position.set(PX, 2.2, PZ);
   motel.add(boothLight);
+
+  /* the GAS STATION across the road, 1971: a canopy on four posts over two
+     pumps, an office with a big window, and the price on a pole */
+  const GX = 18, GZ = -4;
+  put(new THREE.BoxGeometry(9, 0.5, 8), white, GX, 4.6, GZ);
+  put(new THREE.BoxGeometry(9.1, 0.4, 8.1), mat({ color: 0xc0302a, roughness: 0.6 }), GX, 4.2, GZ);
+  [[-3.8, -3.3], [3.8, -3.3], [-3.8, 3.3], [3.8, 3.3]].forEach(([dx, dz]) =>
+    put(new THREE.BoxGeometry(0.28, 4.2, 0.28), white, GX + dx, 2.1, GZ + dz));
+  put(new THREE.BoxGeometry(1.4, 0.2, 5.6), concrete, GX, 0.1, GZ);          // the pump island
+  const pumpM = mat({ color: 0xc0302a, roughness: 0.5 });
+  [-1.6, 1.6].forEach((dz) => {
+    put(new THREE.BoxGeometry(0.7, 1.6, 0.9), pumpM, GX, 1.0, GZ + dz);
+    put(new THREE.BoxGeometry(0.72, 0.4, 0.5), white, GX, 1.95, GZ + dz);
+  });
+  put(new THREE.BoxGeometry(8, 3.4, 6), white, GX + 9, 1.7, GZ - 5);
+  put(new THREE.BoxGeometry(8.6, 0.35, 6.8), mat({ color: 0xc0302a, roughness: 0.6 }), GX + 9, 3.55, GZ - 5);
+  put(new THREE.PlaneGeometry(4.2, 1.6), litM, GX + 4.99, 1.7, GZ - 4).rotation.y = -Math.PI / 2;
+  put(new THREE.BoxGeometry(0.08, 2.15, 1.0), trimM, GX + 4.98, 1.08, GZ - 7);
+  const gasSign = put(new THREE.PlaneGeometry(3.2, 3.2),
+    basic({ map: neonTexture([['GAS', '#ff2d1f'], ['33.9¢', '#ffffff']], 256, 256), transparent: true }), 10, 7.6, 7);
+  const gasBack = gasSign.clone(); gasBack.rotation.y = Math.PI; motel.add(gasBack);
+  put(new THREE.CylinderGeometry(0.2, 0.2, 6, 8), mat({ color: 0x6a6a6a }), 10, 3, 7);
 
   /* ---------------------------------------------- the car
      A red convertible, top down: the hood and the windshield frame are
@@ -58245,9 +58348,14 @@ function buildDesert(scene) {
 
   /* things you can walk into once you are on foot, desert-local x */
   const colliders = [
-    { x: 3.2, z: end - 3.4, hw: 0.5, hd: 0.45 },    // the phone booth
-    { x: -16, z: end - 10, hw: 13, hd: 4.5 },       // the motel block
-    { x: 9, z: end - 2, hw: 0.25, hd: 0.25 },       // the sign post
+    { x: PX, z: end + PZ, hw: 0.6, hd: 0.6 },             // the phone booth
+    { x: MX, z: end + MZ, hw: 13, hd: 4 },                // the rooms
+    { x: -11.5, z: end - 12, hw: 2.5, hd: 3.5 },          // the office
+    { x: -9.5, z: end + 8, hw: 0.25, hd: 0.25 },          // the sign post
+    { x: -24, z: end - 4.5, hw: 1.0, hd: 2.8 },           // the wagon
+    { x: GX, z: end + GZ, hw: 0.7, hd: 2.8 },             // the pumps
+    { x: GX + 9, z: end + GZ - 5, hw: 4, hd: 3 },         // the gas station office
+    { x: 10, z: end + 7, hw: 0.2, hd: 0.2 },              // its sign
   ];
 
   /* ---------------------------------------------- lighting
@@ -58271,7 +58379,7 @@ function buildDesert(scene) {
     lights,
     car,
     colliders,
-    phone: new THREE.Vector3(3.2, 0, end - 3.4),
+    phone: new THREE.Vector3(PX, 0, end + PZ),
     // the town's moving parts, what you can hit in it, and its night light
     update: town.update,
     obstacles: town.obstacles,
@@ -58318,6 +58426,32 @@ function makeVehicle(kind, color) {
     g.userData.len = long; g.userData.halfW = 0.95;
   }
   g.userData.rigid = true;
+  g.rotation.order = 'YXZ';
+  return g;
+}
+
+/* A highway patrol car, 1971: a big black sedan with white doors and roof
+   and a pair of red lamps up top that take turns. Forward is -Z, like the
+   traffic. userData.lamps are the two lamp materials, for the flashing. */
+function makePatrolCar() {
+  const g = new THREE.Group();
+  const M = (color, r = 0.5, m = 0.15) => new THREE.MeshStandardMaterial({ color, roughness: r, metalness: m });
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const black = M(0x121216, 0.4), white = M(0xece8de, 0.45), glass = M(0x2a3a44, 0.2, 0.4);
+  add(new THREE.BoxGeometry(1.95, 0.72, 5.3), black, 0, 0.74, 0);                 // the body
+  add(new THREE.BoxGeometry(1.97, 0.5, 2.3), white, 0, 0.78, 0.2);                 // the doors
+  add(new THREE.BoxGeometry(1.75, 0.52, 2.3), glass, 0, 1.36, 0.25);               // the glasshouse
+  add(new THREE.BoxGeometry(1.78, 0.08, 2.2), white, 0, 1.64, 0.25);               // the roof
+  add(new THREE.BoxGeometry(0.9, 0.14, 0.3), M(0x2a2a2a, 0.6), 0, 1.72, -0.2);     // the bar
+  const lamps = [new THREE.MeshBasicMaterial({ color: 0x400808 }), new THREE.MeshBasicMaterial({ color: 0x400808 })];
+  add(new THREE.BoxGeometry(0.3, 0.2, 0.26), lamps[0], -0.3, 1.84, -0.2);
+  add(new THREE.BoxGeometry(0.3, 0.2, 0.26), lamps[1], 0.3, 1.84, -0.2);
+  const tyre = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12), dark = M(0x1a1616, 0.8);
+  [[-0.95, -1.7], [0.95, -1.7], [-0.95, 1.7], [0.95, 1.7]].forEach(([x, z]) => { add(tyre, dark, x, 0.4, z).rotation.z = Math.PI / 2; });
+  const head = new THREE.MeshBasicMaterial({ color: 0xfff2c8 });
+  [-0.65, 0.65].forEach((x) => { add(new THREE.CircleGeometry(0.14, 10), head, x, 0.8, -2.66).rotation.y = Math.PI; });
+  g.userData.lamps = lamps;
+  g.userData.len = 5.3; g.userData.halfW = 0.98;
   g.rotation.order = 'YXZ';
   return g;
 }
@@ -59103,7 +59237,285 @@ function welcomeTexture(back) {
   return tex;
 }
 
-return { ROAD, COURT, TOWN, inCourt, roadX, roadY, roadHeading, roadSlope, lateral, roadPoint, groundY, buildDesert, makeVehicle, DRIVER_SEAT, makeCar, damageCar };
+return { ROAD, COURT, TOWN, inCourt, roadX, roadY, roadHeading, roadSlope, lateral, roadPoint, groundY, buildDesert, makeVehicle, makePatrolCar, DRIVER_SEAT, makeCar, damageCar };
+})();
+
+/* ==========================================================
+   mint.js
+   ========================================================== */
+var __m_mint = (function(){
+/* ============================================================
+   THE MINT 400 — the race you were sent to cover.
+
+   The book's joke is that there was nothing to see: four hundred miles
+   of motorcycles and dune buggies going round a loop of desert in a dust
+   cloud so thick that from the pits you could not tell whether anything
+   was out there at all. So that is the scene. A dirt oval, a rail, a
+   press tent, a banner -- and dust, and the sound of engines going past
+   somewhere in it.
+
+   It is a memory: you get to it by sitting down at the typewriter in
+   1850, and it is over when you have actually SEEN three of the machines
+   with your own eyes, or when the morning runs out. How far you can see
+   into the dust is PERCEPTION, which main.js turns into the fog; this
+   file only builds the place, drives the racers round, and says which of
+   them you were looking at when they came out of it.
+
+   Built far out in +Z, in a place nothing else in the game can reach.
+   ============================================================ */
+const THREE = window.THREE;
+const { makeVehicle } = __m_desert;
+
+const MINT = { x: 0, z: 1200 };
+const STRAIGHT = 60;           // half the length of each straight
+const R = 30;                  // the bends, and half the gap between the straights
+const LAP = 4 * STRAIGHT + 2 * Math.PI * R;
+const HALF_W = 4.5;            // half the width of the churned-up track
+// the pits: the strip of desert behind the rail on the near straight
+const PITS = { x0: -48, x1: 48, z0: R + HALF_W + 1.6, z1: R + 32 };
+const MINT_SPAWN = { x: 0, z: R + 14 };
+
+/** a point u metres round the loop from the near straight. heading is a
+    rotation.y that points a -Z-forward model the way it is going */
+function lapPoint(u, out) {
+  u = ((u % LAP) + LAP) % LAP;
+  const a = 2 * STRAIGHT, b = Math.PI * R;
+  if (u < a) {                                  // the near straight, going -x
+    out.x = STRAIGHT - u; out.z = R; out.heading = Math.PI / 2;
+  } else if (u < a + b) {                       // round the far-left bend
+    const t = (u - a) / R;
+    out.x = -STRAIGHT - Math.sin(t) * R; out.z = Math.cos(t) * R; out.heading = Math.PI / 2 - t;
+  } else if (u < 2 * a + b) {                   // the far straight, going +x
+    out.x = -STRAIGHT + (u - a - b); out.z = -R; out.heading = -Math.PI / 2;
+  } else {                                      // and round the right-hand bend home
+    const t = (u - 2 * a - b) / R;
+    out.x = STRAIGHT + Math.sin(t) * R; out.z = -Math.cos(t) * R; out.heading = -Math.PI / 2 - t;
+  }
+  return out;
+}
+
+function bannerTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 96;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f2ead6'; g.fillRect(0, 0, 512, 96);
+  g.fillStyle = '#b3201a'; g.fillRect(0, 0, 512, 12); g.fillRect(0, 84, 512, 12);
+  g.fillStyle = '#1b1b1b';
+  g.font = 'bold 50px Georgia, serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('THE MINT 400', 256, 50);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function plateTexture(n) {
+  const cv = document.createElement('canvas');
+  cv.width = 64; cv.height = 64;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f4f0e0'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#111';
+  g.font = 'bold 40px Helvetica, Arial, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(String(n), 32, 34);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// what you write down about each of them, if you see it
+const RACERS = [
+  { kind: 'bike', n: 23, color: 0xc0302a, what: 'a Husqvarna, stood up on the pegs, doing ninety into a wall of nothing' },
+  { kind: 'buggy', n: 7, color: 0x2f7fc0, what: 'a Meyers Manx dune buggy, sideways, with both men in it screaming' },
+  { kind: 'bike', n: 41, color: 0xe0b020, what: 'a yellow Bultaco with the rider looking straight at you through his goggles' },
+  { kind: 'bike', n: 12, color: 0x2a8a3a, what: 'a Yamaha, and then the same Yamaha again, a lap later, now missing its front fender' },
+  { kind: 'buggy', n: 88, color: 0xe06a1a, what: 'a Volkswagen buggy on three wheels and a prayer' },
+  { kind: 'bike', n: 5, color: 0xf0f0f0, what: 'a white Triumph going the wrong way round, as far as anyone could tell' },
+];
+
+function buildMint(scene) {
+  const group = new THREE.Group();
+  group.position.set(MINT.x, 0, MINT.z);
+  group.visible = false;
+  scene.add(group);
+  const mat = (o) => new THREE.MeshStandardMaterial(o);
+  const add = (geo, m, x, y, z, parent = group) => {
+    const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o;
+  };
+  let seed = 400;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+
+  // ---- the air, which is the whole point
+  const fog = new THREE.FogExp2(0xcdb08a, 0.1);
+
+  // ---- light: a flat white morning sun through the dust
+  group.add(new THREE.HemisphereLight(0xf3e2c0, 0x8a6a4a, 1.7));
+  const sun = new THREE.DirectionalLight(0xffe6c0, 1.4);
+  sun.position.set(-40, 80, 30);
+  group.add(sun, sun.target);
+
+  // ---- the ground: flat hardpan, faintly mottled
+  {
+    const geo = new THREE.PlaneGeometry(700, 700, 70, 70);
+    geo.rotateX(-Math.PI / 2);
+    const P = geo.attributes.position, col = new Float32Array(P.count * 3);
+    const a = new THREE.Color(0xc8a676), b = new THREE.Color(0xb08c5c), c = new THREE.Color();
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), z = P.getZ(i);
+      c.copy(a).lerp(b, 0.5 + 0.5 * Math.sin(x * 0.13 + z * 0.07) * Math.sin(x * 0.05 - z * 0.11));
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    add(geo, mat({ vertexColors: true, roughness: 1 }), 0, 0, 0);
+  }
+
+  // ---- the track: a ribbon of churned dirt round the loop
+  {
+    const N = 160, p = {}, pos = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      lapPoint((i / N) * LAP, p);
+      // across the track: the heading is the direction of travel
+      const nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
+      pos.push(p.x + nx * HALF_W, 0.03, p.z + nz * HALF_W, p.x - nx * HALF_W, 0.03, p.z - nz * HALF_W);
+      if (i < N) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    add(geo, mat({ color: 0x8a6a48, roughness: 1, side: THREE.DoubleSide }), 0, 0, 0);
+  }
+
+  // ---- the rail you watch from, and the pits behind it
+  const wood = mat({ color: 0x8a6a4a, roughness: 0.95 });
+  const railZ = PITS.z0 - 0.4;
+  for (let x = -50; x <= 50; x += 3.2) add(new THREE.BoxGeometry(0.16, 1.1, 0.16), wood, x, 0.55, railZ);
+  add(new THREE.BoxGeometry(100.4, 0.12, 0.1), wood, 0, 1.0, railZ);
+  add(new THREE.BoxGeometry(100.4, 0.1, 0.08), wood, 0, 0.55, railZ);
+  // the banner over the pits, on two poles
+  const pole = mat({ color: 0x5a5a5a, roughness: 0.6, metalness: 0.3 });
+  [-9, 9].forEach((x) => add(new THREE.CylinderGeometry(0.1, 0.1, 6, 8), pole, x, 3, railZ + 1.2));
+  add(new THREE.PlaneGeometry(17, 2.2), new THREE.MeshBasicMaterial({ map: bannerTexture(), side: THREE.DoubleSide }),
+    0, 5.0, railZ + 1.2);
+  // the press tent: a striped canopy, a trestle table, nobody under it
+  const canvasM = mat({ color: 0xe9e0c8, roughness: 0.9 }), stripe = mat({ color: 0xb3201a, roughness: 0.9 });
+  add(new THREE.BoxGeometry(8, 0.15, 6), canvasM, -20, 3.0, 50);
+  for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.9, 0.16, 6.02), stripe, -23 + i * 2, 3.0, 50);
+  [[-23.8, 47.2], [-16.2, 47.2], [-23.8, 52.8], [-16.2, 52.8]].forEach(([x, z]) =>
+    add(new THREE.BoxGeometry(0.1, 3, 0.1), pole, x, 1.5, z));
+  add(new THREE.BoxGeometry(4, 0.08, 1.2), wood, -20, 0.8, 50);
+  [[-21.6, 49.6], [-18.4, 49.6], [-21.6, 50.4], [-18.4, 50.4]].forEach(([x, z]) =>
+    add(new THREE.BoxGeometry(0.06, 0.8, 0.06), wood, x, 0.4, z));
+  // the teams' trucks, parked any old how
+  [[18, 52, 0.4, 0x6a4a3a], [26, 56, -0.2, 0x3a5a6a], [34, 50, 1.1, 0x8a8a70]].forEach(([x, z, r, c]) => {
+    const v = makeVehicle('pickup', c);
+    v.position.set(x, 0, z); v.rotation.y = r;
+    group.add(v);
+  });
+  // and a few oil drums, because every pit has oil drums
+  const drum = mat({ color: 0x3a4a5a, roughness: 0.6, metalness: 0.3 });
+  for (let i = 0; i < 6; i++) add(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 10), drum, 8 + rnd() * 30, 0.45, 42 + rnd() * 14);
+
+  // ---- the racers
+  const racers = RACERS.map((def, i) => {
+    const g = new THREE.Group();
+    const paint = mat({ color: def.color, roughness: 0.5 });
+    const dark = mat({ color: 0x1a1616, roughness: 0.8 });
+    const rider = mat({ color: 0xd8d0c0, roughness: 0.8 });
+    const plate = new THREE.MeshBasicMaterial({ map: plateTexture(def.n) });
+    const tyre = new THREE.CylinderGeometry(def.kind === 'bike' ? 0.34 : 0.42, def.kind === 'bike' ? 0.34 : 0.42, 0.2, 10);
+    if (def.kind === 'bike') {
+      add(new THREE.BoxGeometry(0.35, 0.45, 1.5), paint, 0, 0.7, 0, g);
+      add(tyre, dark, 0, 0.34, -0.7, g).rotation.z = Math.PI / 2;
+      add(tyre, dark, 0, 0.34, 0.7, g).rotation.z = Math.PI / 2;
+      add(new THREE.BoxGeometry(0.4, 0.75, 0.35), rider, 0, 1.35, 0.1, g);      // the rider
+      add(new THREE.SphereGeometry(0.2, 8, 6), paint, 0, 1.9, 0, g);            // his helmet
+      const pl = add(new THREE.PlaneGeometry(0.34, 0.34), plate, 0.19, 0.8, -0.3, g); pl.rotation.y = Math.PI / 2;
+      const pr = add(new THREE.PlaneGeometry(0.34, 0.34), plate, -0.19, 0.8, -0.3, g); pr.rotation.y = -Math.PI / 2;
+    } else {
+      add(new THREE.BoxGeometry(1.6, 0.45, 3.0), paint, 0, 0.7, 0, g);
+      [[-0.85, -1.1], [0.85, -1.1], [-0.85, 1.1], [0.85, 1.1]].forEach(([x, z]) => { add(tyre, dark, x, 0.42, z, g).rotation.z = Math.PI / 2; });
+      // the roll cage and the two men in it
+      [[-0.7, 0.4], [0.7, 0.4]].forEach(([x, z]) => add(new THREE.BoxGeometry(0.08, 1.0, 0.08), pole, x, 1.4, z, g));
+      add(new THREE.BoxGeometry(1.5, 0.08, 0.08), pole, 0, 1.9, 0.4, g);
+      [-0.35, 0.35].forEach((x) => add(new THREE.SphereGeometry(0.2, 8, 6), rider, x, 1.5, 0.2, g));
+      const pl = add(new THREE.PlaneGeometry(0.5, 0.5), plate, 0.81, 0.75, 0, g); pl.rotation.y = Math.PI / 2;
+      const pr = add(new THREE.PlaneGeometry(0.5, 0.5), plate, -0.81, 0.75, 0, g); pr.rotation.y = -Math.PI / 2;
+    }
+    // the rooster tail: three puffs of dust, trailing
+    const puffM = new THREE.MeshBasicMaterial({ color: 0xd6bc94, transparent: true, opacity: 0.45, depthWrite: false });
+    const puffs = [0, 1, 2].map((k) => add(new THREE.SphereGeometry(0.9 + k * 0.5, 8, 6), puffM, 0, 0.8 + k * 0.3, 1.6 + k * 1.6, g));
+    g.rotation.order = 'YXZ';
+    group.add(g);
+    return { def, g, puffs, u: i * (LAP / RACERS.length) + rnd() * 20,
+      v: 23 + rnd() * 8, lane: (rnd() - 0.5) * 5, seen: false, near: false };
+  });
+
+  // ---- dust hanging in the air round you, drifting
+  const DUST = 700;
+  const dustPos = new Float32Array(DUST * 3);
+  for (let i = 0; i < DUST; i++) {
+    dustPos[i * 3] = (rnd() - 0.5) * 40; dustPos[i * 3 + 1] = rnd() * 6; dustPos[i * 3 + 2] = (rnd() - 0.5) * 40;
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+  const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xe0c89c, size: 0.09, transparent: true, opacity: 0.8, depthWrite: false }));
+  dust.frustumCulled = false;
+  group.add(dust);
+
+  const p = {}, toR = new THREE.Vector3();
+  return {
+    group, fog, racers,
+    show() { group.visible = true; },
+    hide() { group.visible = false; },
+    /* Drive them round. Returns what happened this frame:
+         seen   racers that came out of the dust in front of you, first time
+         passes racers that went by close, for the engine noise
+       @param eye   the camera's world position
+       @param fwd   the camera's world forward (unit)
+       @param see   how far you can see into the dust, metres */
+    update(dt, clock, eye, fwd, see) {
+      const seen = [], passes = [];
+      for (const r of racers) {
+        r.u += r.v * dt;
+        lapPoint(r.u, p);
+        // lanes wander, the way they do when nobody can see the lines
+        const lane = r.lane + Math.sin(clock * 0.7 + r.def.n) * 1.2;
+        const nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
+        r.g.position.set(p.x + nx * lane, 0, p.z + nz * lane);
+        r.g.rotation.y = p.heading;
+        // bikes lean into the bends; everything bounces
+        const uu = ((r.u % LAP) + LAP) % LAP, a = 2 * STRAIGHT, b = Math.PI * R;
+        const bend = (uu > a && uu < a + b) || uu > 2 * a + b;
+        r.g.rotation.z = r.def.kind === 'bike' && bend ? 0.35 : 0;
+        r.g.position.y = Math.abs(Math.sin(clock * 9 + r.def.n)) * 0.12;
+        r.puffs.forEach((m, k) => { m.scale.setScalar(1 + 0.25 * Math.sin(clock * 6 + k * 2 + r.def.n)); });
+
+        toR.set(MINT.x + r.g.position.x - eye.x, 0, MINT.z + r.g.position.z - eye.z);
+        const d = toR.length();
+        const facing = d > 0.01 ? (toR.x * fwd.x + toR.z * fwd.z) / (d * Math.hypot(fwd.x, fwd.z) || 1) : 1;
+        if (!r.seen && d < see && facing > 0.72) { r.seen = true; seen.push(r); }
+        if (!r.near && d < 26) { r.near = true; passes.push({ r, d, toR: toR.clone() }); }
+        else if (r.near && d > 34) r.near = false;
+      }
+      // the air moves; the dust goes with it, and stays round your head
+      const P = dustGeo.attributes.position;
+      const lx = eye.x - MINT.x, lz = eye.z - MINT.z;
+      for (let i = 0; i < DUST; i++) {
+        let x = P.getX(i) + dt * 3.2, y = P.getY(i) + Math.sin(clock + i) * dt * 0.2, z = P.getZ(i) + dt * 0.8;
+        if (x > lx + 20) x -= 40; if (x < lx - 20) x += 40;
+        if (z > lz + 20) z -= 40; if (z < lz - 20) z += 40;
+        if (y < 0) y += 6; if (y > 6) y -= 6;
+        P.setXYZ(i, x, y, z);
+      }
+      P.needsUpdate = true;
+      return { seen, passes };
+    },
+    reset() { racers.forEach((r) => { r.seen = false; r.near = false; }); },
+  };
+}
+
+return { MINT, PITS, MINT_SPAWN, buildMint };
 })();
 
 /* ==========================================================
@@ -60892,6 +61304,70 @@ const DIALOGUE = {
     },
   },
 
+  /* ------------------------------------ ACT THREE: the highway patrol
+     The book's patrolman: young, polite, and much more interested in why
+     you stopped the way you did than in how fast you were going. Every
+     way out of it lets you drive on. What it costs is the question. */
+  chp: {
+    start: 'h0',
+    nodes: {
+      h0: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'Morning. You stopped faster than anybody I have ever seen stop. '
+            + 'Do you know how fast you were going before that?',
+        time: 10,
+        options: [
+          { text: '[hand over the licence. both hands where he can see them]',
+            req: R('composure', 0.45), go: 'h1' },
+          { text: 'I was going to race you. Then I thought better of it.',
+            req: R('nerve', 0.55), go: 'h2' },
+          { text: '[offer him a beer out of the cooler]', go: 'hBad' },
+          { text: '[say nothing. grip the wheel.]', go: 'hStare' },
+        ],
+      },
+      h1: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'He reads the licence for a long time. "Long night, Mr. Duke? There is a '
+            + 'rest area twelve miles on. You are going to sleep in it. That is not a suggestion."',
+        time: 9,
+        options: [
+          { text: 'Yes, officer.', effect: { complete: 'chp', fear: -0.1 }, end: true,
+            say: 'He writes you a warning, not a ticket, and walks back to his car without looking round.' },
+        ],
+      },
+      h2: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: '"You would have won." He very nearly smiles. "That is the problem. '
+            + 'That is why I am writing you up."',
+        time: 8,
+        options: [
+          { text: '[take the ticket]', effect: { complete: 'chp', pay: 25, loathing: 0.04 }, end: true,
+            say: 'Twenty-five dollars, payable in person at a courthouse you will never see.' },
+        ],
+      },
+      hBad: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'He looks at the can. He looks at the seat, and at what is on the seat. '
+            + '"Sir, I want you to--" His radio says something about a pile-up forty miles back.',
+        time: 8,
+        options: [
+          { text: '[wait]', effect: { complete: 'chp', fear: 0.25, loathing: 0.1 }, end: true,
+            say: '"Go on. Get out of my county." He is already running for his car.' },
+        ],
+      },
+      hStare: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: '"Sir. Sir. Look at me." You look at him. It does not seem to help either of you.',
+        time: 8,
+        options: [
+          { text: 'Duke. Journalist. Heading home.', req: R('composure', 0.3), go: 'h1' },
+          { text: '[keep gripping the wheel]', effect: { complete: 'chp', fear: 0.2, loathing: 0.06 },
+            end: true, say: 'He writes something down, slowly, and lets you go. The something is your plate.' },
+        ],
+      },
+    },
+  },
+
   /* ------------------------------------------ out front
      The film's parking attendant, who takes the car off you on the way in
      and says the one thing you do not want to hear from anybody. */
@@ -61206,12 +61682,13 @@ const DIALOGUE = {
             + 'not going to read aloud.',
         time: 11,
         options: [
-          { text: '[pay it. all of it.]', cost: 450, go: 'bPaid' },
+          // the way it is done: nobody in this line of work has ever paid one
+          { text: '[smile. turn round. walk out on it. do not run.]', go: 'bRun' },
           { text: 'Charge it to the magazine. They are expecting it.',
             req: R('composure', 0.50), go: 'bMag' },
           { text: 'My attorney is handling the account.',
             req: R('nerve', 0.50), go: 'bAtty' },
-          { text: '[walk away from the desk. do not run.]', go: 'bRun' },
+          { text: '[pay it. all of it.]', cost: 450, go: 'bPaid' },
         ],
       },
       bPaid: {
@@ -61240,11 +61717,12 @@ const DIALOGUE = {
       },
       bRun: {
         who: 'SWAN — THE DESK',
-        line: '"Sir. Sir --" and then nothing at all, which is somehow worse.',
+        line: '"Mr. Duke? Sir. Sir --" and then nothing at all, which is somehow worse. '
+            + 'The glass doors are forty feet away and every one of them is a mile.',
         time: 6,
-        options: [{ text: '[keep walking]',
-          effect: { complete: 'bill', flag: 'billRun', fear: 0.18, loathing: 0.08 }, end: true,
-          say: 'Behind you a telephone is lifted off its cradle, very quietly.' }],
+        options: [{ text: '[keep walking. do not look back. do not run.]',
+          effect: { complete: 'bill', flag: 'billRun', fear: 0.1, loathing: 0.03 }, end: true,
+          say: 'Behind you a telephone is lifted off its cradle, very quietly. The car is out front.' }],
       },
     },
   },
@@ -61282,12 +61760,14 @@ const TASK_DEFS = [
   // ---- ACT TWO. The door shuts and the trouble is already inside.
   { stage: 'room', id: 'bath',      text: 'Your attorney is in the bath. He has a request.' },
   { stage: 'room', id: 'maid',      text: 'Somebody is knocking. Get rid of them.' },
+  { stage: 'room', id: 'mint',      text: 'That morning, the Mint 400. Get to the rail and see three of them through the dust.' },
   { stage: 'room', id: 'story',     text: 'File the story. The magazine is still waiting.' },
   { stage: 'room', id: 'downstairs', text: 'Out into the hall. Take the lift back down.' },
   // ---- and out the way you came in, across the whole floor
   { stage: 'out', id: 'checkout',  text: 'Out the front doors by the desk. The car is out front.' },
   // ---- ACT THREE. Out of the city before it notices you leaving.
   { stage: 'road', id: 'drive',     text: 'Drive. Keep it between the lines until you find somewhere to stop.' },
+  { stage: 'road', id: 'chp',       text: 'Red lamps behind you. Stop and talk to the man, or outrun him.' },
   { stage: 'road', id: 'callback',  text: 'The payphone is ringing. Nobody knows you are here.' },
   { stage: 'road', id: 'return',    text: 'Drive back. The convention is waiting in the town you just left.' },
   // ---- ACT FOUR. The District Attorneys, in the ballroom off the east wing.
@@ -61296,7 +61776,7 @@ const TASK_DEFS = [
   { stage: 'convention', id: 'georgia', text: 'Your attorney has found a delegate from Georgia at the coffee urn.' },
   { stage: 'convention', id: 'walkout', text: 'Out through the foyer doors, before anybody checks a badge twice.' },
   // ---- ACT FIVE. The bill, the car, and west.
-  { stage: 'last', id: 'bill',     text: 'The desk has your bill. Settle it, one way or another.' },
+  { stage: 'last', id: 'bill',     text: 'The desk has your bill. You could pay it. Nobody in your line of work ever has.' },
   { stage: 'last', id: 'westward', text: 'The car is out front. Drive west, and do not stop for the telephone.' },
 ];
 
@@ -61807,6 +62287,13 @@ class Game {
     this._renderTasks();
   }
 
+  /** back to not yet begun, as if it never came up (a wreck undoes it) */
+  resetTask(id) {
+    const t = this.tasks.find((x) => x.id === id);
+    if (t && t.state !== 'done') t.state = 'todo';
+    this._renderTasks();
+  }
+
   taskState(id) { return this.tasks.find((x) => x.id === id)?.state; }
 
   get stage() {
@@ -62135,7 +62622,7 @@ class Game {
   /* Back down in the lift. The same floor, the same four hundred district
      attorneys, and the only errand left is the front door. */
   leaveSuite() {
-    ['bath', 'maid', 'story'].forEach((id) => this.completeTask(id));
+    ['bath', 'maid', 'mint', 'story'].forEach((id) => this.completeTask(id));
     this.completeTask('downstairs');
     this.act = 1;
     this.leaving = true;
@@ -62148,8 +62635,10 @@ class Game {
   /* The real ending. You do not win this by surviving the night -- the night
      was the easy part -- you win it by being able to write the thing down
      afterwards, which is the one job the chemistry cannot do for you. */
-  fileStory() {
-    if (this.composure < STORY_COMPOSURE) {
+  /** @param remembered straight back from the Mint 400, when it comes
+      out all at once and the chemistry does not get a say */
+  fileStory(remembered = false) {
+    if (!remembered && this.composure < STORY_COMPOSURE) {
       this.audio.deny();
       this.say('The keys are there. The words are not. You cannot hold a '
         + 'sentence still long enough to hit it. Wait for it to wear off, '
@@ -62164,8 +62653,16 @@ class Game {
     // the hall, the lift, the floor, the front doors, and then the car.
     this.completeTask('story');
     this.activate('downstairs');
-    this.say('Two thousand words, most of them true, none of them the assignment. '
-      + 'Now get out of this town before somebody reads it.');
+    // what it says is what you saw out there
+    const saw = this.mintSeen || [], seen = saw.length;
+    this.say(seen >= 3
+      ? `Two thousand words, most of them true. Number ${saw[0].n}: ${saw[0].what}. `
+        + `Number ${saw[1].n}: ${saw[1].what}. Now get out of this town before somebody reads it.`
+      : seen > 0
+        ? 'Two thousand words about the dust, and in the middle of them one or two machines '
+          + 'you would swear to. The rest you make up. Now get out of this town before somebody reads it.'
+        : 'Two thousand words about the dust, and not one motorcycle in any of them, which is '
+          + 'the truest thing anybody will write about that race. Now get out of this town.', null, 9);
     return true;
   }
 
@@ -62358,7 +62855,8 @@ class Game {
     body += this.billPaid ? ' The bill is paid, which nobody is going to believe.'
       : this.billMag ? ' The magazine gets the bill. Then the magazine gets a lawyer.'
       : this.billAtty ? ' The bill belongs to your attorney now, which is to say to nobody.'
-      : this.billRun ? ' Somewhere back there a desk clerk is still saying sir.' : '';
+      : this.billRun ? ' Somewhere back there a desk clerk is still saying sir, and a bill for '
+        + 'four hundred and fifty dollars is going to follow you across three states and never quite catch up.' : '';
     if (this.georgiaSpooked) {
       body += ' And in Georgia a district attorney is going to sleep with the lights on '
         + 'for a year.';
@@ -62774,13 +63272,14 @@ const THREE = window.THREE;
 const { buildWorld } = __m_world;
 const { buildSuite, SUITE } = __m_suite;
 // (one line: build.rb rewrites imports line by line)
-const { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } = __m_desert;
+const { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, makePatrolCar, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } = __m_desert;
 const { buildConvention, CONV } = __m_convention;
 const { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } = __m_npc;
 const { Post } = __m_post;
 const { Audio } = __m_audio;
 const { Game, SUBSTANCES, STORY_COMPOSURE } = __m_game;
 const { touch, initTouch, askForMotion, sampleTouch, resetTouch } = __m_touch;
+const { buildMint, MINT, PITS, MINT_SPAWN } = __m_mint;
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -62810,6 +63309,9 @@ scene.fog = FOG[1];
 // Room 1850 is built at the same time as the casino and simply kept
 // hidden. It sits far out in +X so nothing about it can reach the floor.
 const suite = buildSuite(scene);
+// and the Mint 400, which is only ever a memory, far out in +Z
+const mint = buildMint(scene);
+FOG[5] = mint.fog;
 const SUITE_X = 300;
 suite.group.position.x = SUITE_X;
 // The highway is the road outside the hotel. It starts under the parked
@@ -63012,6 +63514,119 @@ const tp = {};
 function clearTraffic() {
   traffic.forEach((V) => { V.active = false; V.mesh.visible = false; });
 }
+/* ------------------------------------------------ the highway patrol
+   The book's stop on the road out: somewhere in the empty middle of the
+   drive a black-and-white comes up behind you with its lamps going. Stop
+   -- anywhere, the shoulder or the lane, however hard -- and he pulls in
+   behind you and walks up to the window. Keep going and he sits on your
+   bumper for half a minute, then drops back to his radio. Once a game: a
+   wreck on the way out before he has had his word puts him back on the
+   road for next time. */
+const COP_AT = 1150;                 // metres out of town when he finds you
+const COP_GIVES_UP = 30;             // seconds of not stopping
+const cop = { state: 'idle', s: 0, lat: LANE, v: 0, t: 0, siren: 0, mesh: makePatrolCar() };
+cop.mesh.visible = false;
+desert.group.add(cop.mesh);
+function copReset() {
+  if (cop.state !== 'done') {
+    cop.state = 'idle';
+    game.resetTask('chp');
+  }
+  cop.mesh.visible = false;
+}
+function placeCop() {
+  roadPoint(cop.s, cop.lat, tp);
+  cop.mesh.position.set(tp.x, tp.y, tp.z);
+  cop.mesh.rotation.y = tp.heading;
+  cop.mesh.rotation.x = Math.atan(tp.slope);
+}
+/** outbound only. Returns true while he has you stopped. */
+function updateCop(dt) {
+  const ps = -(car.pos.z - DESERT_Z);
+  const plat = latOf(car.pos.x, car.pos.z);
+  if (cop.state === 'idle') {
+    if (ps < COP_AT || car.final || car.speed < 8) return false;
+    cop.state = 'chase';
+    cop.s = ps - 100; cop.lat = plat; cop.v = car.speed + 14; cop.t = 0; cop.siren = 0;
+    cop.mesh.visible = true;
+    // the other lane is his for this: nobody coming the other way
+    clearTraffic();
+    game.activate('chp');
+    game.fear = clamp(game.fear + 0.12);
+    game.say('Red lamps in the mirror, coming up fast. Highway patrol. '
+      + 'Stop the car -- or see how far he wants it.', null, 7);
+  }
+  // the lamps take turns, whatever he is doing
+  const lit = Math.floor(clock * 5) % 2;
+  cop.mesh.userData.lamps[0].color.setHex(lit ? 0xff2a1a : 0x400808);
+  cop.mesh.userData.lamps[1].color.setHex(lit ? 0x400808 : 0xff2a1a);
+  if (cop.state === 'chase') {
+    cop.t += dt;
+    const gap = ps - cop.s;
+    // Closes fast from a distance and sits on your bumper. You cannot turn
+    // round far enough in the seat to see him there, so after a few
+    // seconds of that he pulls out and comes up alongside, in the other
+    // lane, where he is at the edge of the windscreen with his lamps going.
+    const beside = cop.t > 5 && gap < 30;
+    const stay = beside ? -1.5 : 12;
+    const want = car.speed + clamp((gap - stay) * 0.7, -6, 20);
+    cop.v += clamp(want - cop.v, -9 * dt, 9 * dt);
+    cop.s += Math.max(0, cop.v) * dt;
+    const wantLat = beside ? plat - 3.8 : plat;
+    cop.lat += (wantLat - cop.lat) * Math.min(1, dt * 1.2);
+    // and never through you
+    if (Math.abs(cop.lat - plat) < 2.4 && ps - cop.s < 11) cop.s = ps - 11;
+    cop.siren -= dt;
+    if (cop.siren <= 0) {
+      cop.siren = 1.8;
+      audio.siren(0.1 / (1 + Math.max(0, gap - 10) * 0.02), 0);
+    }
+    placeCop();
+    if (car.speed < 0.5 && gap < 60) {
+      // stopped. He rolls up behind you and gets out.
+      cop.state = 'pull'; cop.t = 0;
+      game.say('He pulls in behind you. The door opens. The door shuts.', null, 4);
+    } else if (cop.t > COP_GIVES_UP) {
+      cop.state = 'gone'; cop.t = 0;
+      game.copRan = true;
+      game.fear = clamp(game.fear + 0.2);
+      game.loathing = clamp(game.loathing + 0.08);
+      game.completeTask('chp');
+      game.say('The lamps fall back, and then they go out. He has a radio, though, '
+        + 'and yours is the only red convertible in the state.', null, 7);
+    }
+    return false;
+  }
+  if (cop.state === 'pull') {
+    cop.t += dt;
+    // he drops back and tucks in behind you, where a patrol car stops
+    const target = ps - 11;
+    cop.s += (target - cop.s) * Math.min(1, dt * 1.6);
+    cop.lat += (plat - cop.lat) * Math.min(1, dt * 1.6);
+    placeCop();
+    if (cop.t > 2.2 && !game.dlg) { cop.state = 'talk'; game.openDialogue('chp'); }
+    return true;
+  }
+  if (cop.state === 'talk') {
+    if (game.dlg) return true;
+    // however it ended -- even saying nothing until he gave up on you
+    game.completeTask('chp');
+    cop.state = 'done'; cop.t = 0;
+    return false;
+  }
+  if (cop.state === 'gone') {
+    cop.t += dt;
+    cop.v = Math.max(0, cop.v - 6 * dt);
+    cop.s += cop.v * dt;
+    placeCop();
+    if (ps - cop.s > 400) { cop.mesh.visible = false; cop.state = 'done'; }
+    return false;
+  }
+  // done: parked where he stopped you until he is out of sight
+  if (cop.mesh.visible && ps - cop.s > 400) cop.mesh.visible = false;
+  return false;
+}
+
 /** @param dir +1 driving out (south), -1 driving back. Returns true on a crash. */
 function updateTraffic(dt, dir) {
   const ps = -(car.pos.z - DESERT_Z);
@@ -63019,7 +63634,7 @@ function updateTraffic(dt, dir) {
   for (const V of traffic) {
     if (!V.active) {
       V.cool -= dt;
-      if (V.cool > 0 || car.speed < 6) continue;
+      if (V.cool > 0 || car.speed < 6 || cop.state === 'chase' || cop.state === 'pull' || cop.state === 'talk') continue;
       const s = ps + dir * (420 + Math.random() * 280);
       // never in town, and never in the motel lot
       if (s < 320 || s > ROAD.length - 320) { V.cool = 3; continue; }
@@ -63294,6 +63909,8 @@ const OBJECTIVE_AT = {
     ? new THREE.Vector3((world.frontage.DOOR.x0 + world.frontage.DOOR.x1) / 2, 1.6, world.LOB_Z1)
     : carDoorPoint()),
   drive:     () => new THREE.Vector3(DESERT_X, 2.5, DESERT_Z + desert.end),
+  chp:       () => (cop.mesh.visible && cop.state !== 'done' && cop.state !== 'gone'
+    ? cop.mesh.getWorldPosition(new THREE.Vector3()).setY(1.6) : null),
   callback:  () => new THREE.Vector3(DESERT_X + desert.phone.x, 1.5, DESERT_Z + desert.phone.z),
   // (or, after a wreck on the way back, the lounge door to the convention)
   return:    () => (game.act === 1 ? LOUNGE_DOOR_AT
@@ -63437,7 +64054,15 @@ function interact() {
   } else if (f.kind === 'phone') {
     game.openDialogue('phone');
   } else if (f.kind === 'typewriter') {
-    game.fileStory();
+    // steady enough to write, and nothing yet to write about: the race
+    if (game.composure >= STORY_COMPOSURE && game.taskState('mint') !== 'done') {
+      audio.door();
+      game.say('You put a sheet in the machine and type THE MINT 400, and then you '
+        + 'sit there trying to remember what it looked like.', null, 4);
+      fadeThrough(startMint, 3);
+    } else {
+      game.fileStory();
+    }
   } else if (f.kind === 'bar') {
     game.buyDrink('tequila');
   } else if (f.kind === 'elevator') {
@@ -63521,6 +64146,7 @@ function findFocus() {
     return;
   }
 
+  if (mintOn) { focusTarget = null; game.setPrompt(null); return; }
   if (game.act === 2) {
     consider('npc', gonzo, gonzo.group.position, 3.0,
       game.taskState('bath') === 'done' ? 'YOUR ATTORNEY' : 'YOUR ATTORNEY, IN THE BATH',
@@ -63759,6 +64385,7 @@ function wakeAtBar() {
   const leg = car.returning ? 'return' : game.finale ? 'final' : 'out';
   leaveCar();
   clearTraffic();
+  copReset();
   const at = world.frontage.car;
   car.stage = null; car.returning = false; car.parked = false; car.arrived = false;
   car.final = false; car.speed = 0; car.wheel = 0; car.kick = 0; car.offRoad = 0;
@@ -63873,7 +64500,7 @@ function getInCar() {
 function startActThree() {
   // Same reconciliation the suite does for the casino: once the car is
   // moving there is no going back for anything left unfinished.
-  ['bath', 'maid', 'story', 'downstairs', 'checkout'].forEach((id) => game.completeTask(id));
+  ['bath', 'maid', 'mint', 'story', 'downstairs', 'checkout'].forEach((id) => game.completeTask(id));
   game.leaving = false;
   // the last time out it is morning, the bill is settled, and it is one way
   car.final = game.finale;
@@ -64239,6 +64866,81 @@ function updateFade(dt) {
   if (fade.t >= fade.secs) { game.blackout = 1; fade = null; }
 }
 
+/* ------------------------------------------------ the Mint 400
+   What the story is supposed to be about. You sit down at the typewriter
+   and the room goes, and you are back at the pits that morning with the
+   dust coming across the track like weather. Three of the machines, seen
+   with your own eyes -- or a minute and a half of engines going by in a
+   cloud -- and you are back at the desk with whatever you have. */
+let mintOn = false;
+let mintT = 0;
+const MINT_SECS = 90;
+const mintFwd = new THREE.Vector3();
+function startMint() {
+  mintOn = true;
+  mintT = 0;
+  mint.reset();
+  suite.hide();
+  gonzo.group.visible = false;
+  mint.show();
+  scene.fog = FOG[5];
+  renderer.setClearColor(mint.fog.color, 1);
+  audio.ambience = 'desert';
+  player.pos.set(MINT.x + MINT_SPAWN.x, 1.72, MINT.z + MINT_SPAWN.z);
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = 0;                 // facing the rail and the track beyond it
+  player.pitch = 0;
+  game.activate('mint');
+  game.mintSeen = [];
+  game.say('That morning. The Mint 400: the richest off-road race in the history of '
+    + 'organised sport, and you can see about thirty feet. Get to the rail. Get a look at something.', null, 8);
+}
+function updateMint(dt, s2) {
+  mintT += dt;
+  // how far into it you can see is how well you can see: sober, the rail
+  // and not much past it; on the mescaline, half the back straight
+  const see = 7 + 36 * s2.perception;
+  mint.fog.density = 1.38 / see;
+  camera.getWorldDirection(mintFwd);
+  const { seen, passes } = mint.update(dt, clock, camera.position, mintFwd, see);
+  for (const r of passes) {
+    const side = Math.sin(Math.atan2(-r.toR.x, -r.toR.z) - player.yaw);
+    audio.bike(0.09 / (1 + r.d * 0.04), clamp(-side, -0.9, 0.9));
+  }
+  for (const r of seen) {
+    if (game.mintSeen.length >= 3) break;
+    game.mintSeen.push(r.def);
+    audio.good();
+    game.toast(`#${r.def.n} — IN THE NOTEBOOK (${game.mintSeen.length}/3)`, 'good');
+    game.say(`Out of the dust: ${r.def.what}.`, null, 5);
+  }
+  if (!fade && (game.mintSeen.length >= 3 || mintT > MINT_SECS)) {
+    if (game.mintSeen.length < 3) {
+      game.say('Then the dust closes over all of it, and the morning is gone.', null, 4);
+    }
+    fadeThrough(endMint, 3.4);
+  }
+}
+function endMint() {
+  mintOn = false;
+  mint.hide();
+  suite.show();
+  gonzo.group.visible = true;
+  scene.fog = FOG[2];
+  renderer.setClearColor(0x000000, 1);
+  audio.ambience = 'suite';
+  // back in the chair, facing the machine
+  player.pos.set(SUITE_X + 4.9, 1.72, -1.6);
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = 0;
+  player.pitch = -0.25;
+  game.completeTask('mint');
+  // and it all comes out at once, whatever the chemistry says now
+  game.fileStory(true);
+}
+
 /* Where the car is allowed to be, and what it costs to be anywhere else.
    Three places with three sets of rules:
      the motor court   paved all round; the kerb, the island and the canopy
@@ -64326,7 +65028,9 @@ function driveCar(dt, s) {
   // at the motel you are stopping, and straightening up to do it
   const assist = car.arrived ? clamp(-relHeading(car.heading, car.pos.z) * 0.8, -0.2, 0.2) : 0;
   prevPos.copy(car.pos);
-  stepCar(dt, s, { brake: car.arrived, assist, rough: off > 0 && car.pos.z < DESERT_Z - COURT.mouth ? 0.03 : 0 });
+  // stopped by the highway patrol, the car stays stopped until he is done
+  const held = updateCop(dt);
+  stepCar(dt, s, { brake: car.arrived || held, assist, rough: off > 0 && car.pos.z < DESERT_Z - COURT.mouth ? 0.03 : 0 });
   if (roadRules(dt, 1)) return;
   placeCar();
   if (updateTraffic(dt, 1)) return;
@@ -64350,6 +65054,10 @@ function driveCar(dt, s) {
   if (car.arrived && car.speed < 0.3 && !car.parked) {
     // and then you get out, because the phone is not going to walk over
     clearTraffic();
+    // the patrolman has gone about his day; he is not there on the way back
+    // (and if he was still on your tail, the motel is where he lost interest)
+    cop.mesh.visible = false;
+    if (cop.state !== 'idle' && cop.state !== 'done') { game.completeTask('chp'); cop.state = 'done'; }
     car.speed = 0;
     car.parked = true;
     const out = new THREE.Vector3(-1.9, 0, 0).applyAxisAngle(THREE.Object3D.DEFAULT_UP, car.heading);
@@ -64401,6 +65109,12 @@ function driveBack(dt, s) {
 }
 
 function collide(p) {
+  // the Mint: the pits, behind the rail. The track is theirs.
+  if (mintOn) {
+    p.x = MINT.x + clamp(p.x - MINT.x, PITS.x0, PITS.x1);
+    p.z = MINT.z + clamp(p.z - MINT.z, PITS.z0, PITS.z1);
+    return;
+  }
   // ACT THREE is a parking lot in the middle of nothing. There is no
   // geometry to push against and, more to the point, the casino's own
   // containment would drag the player 900m back across the map.
@@ -64417,8 +65131,8 @@ function collide(p) {
     for (const c of desert.colliders) push(DESERT_X + c.x, DESERT_Z + c.z, c.hw, c.hd);
     if (car.parked) push(car.pos.x, car.pos.z, 1.0, 2.7);
     const lx = p.x - DESERT_X;
-    p.x = DESERT_X + clamp(lx, -30, 22);
-    p.z = clamp(p.z, DESERT_Z + desert.end - 16, DESERT_Z + desert.end + 40);
+    p.x = DESERT_X + clamp(lx, -40, 33);
+    p.z = clamp(p.z, DESERT_Z + desert.end - 19, DESERT_Z + desert.end + 40);
     return;
   }
 
@@ -64819,6 +65533,8 @@ function tick(dt, draw = true) {
     // the lounge there is only quiet music
     audio.ambience = player.pos.z < F.PAVE_Z ? 'street'
       : player.pos.x > world.lounge.X0 ? 'lounge' : 'casino';
+  } else if (game.act === 2 && mintOn) {
+    updateMint(dt, s2);
   } else if (game.act === 2) {
     gonzo.update(clock, s2, player.pos, focusTarget?.obj === gonzo);
     updateMaid(dt, s2);
@@ -64961,6 +65677,11 @@ function precompile() {
   r.compile(scene, camera);
   scene.remove(gonzo.group, maid.group);
   suite.hide();
+  // the Mint, in its dust
+  mint.show();
+  scene.fog = FOG[5];
+  r.compile(scene, camera);
+  mint.hide();
   // the road -- with the hotel still standing at the end of it, which is
   // how it is both out front on the way out and for the whole drive
   world.root.visible = true;

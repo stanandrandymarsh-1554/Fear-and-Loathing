@@ -6,13 +6,14 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { buildSuite, SUITE } from './suite.js';
 // (one line: build.rb rewrites imports line by line)
-import { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } from './desert.js';
+import { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, makePatrolCar, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } from './desert.js';
 import { buildConvention, CONV } from './convention.js';
 import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js';
 import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
 import { touch, initTouch, askForMotion, sampleTouch, resetTouch } from './touch.js';
+import { buildMint, MINT, PITS, MINT_SPAWN } from './mint.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -42,6 +43,9 @@ scene.fog = FOG[1];
 // Room 1850 is built at the same time as the casino and simply kept
 // hidden. It sits far out in +X so nothing about it can reach the floor.
 const suite = buildSuite(scene);
+// and the Mint 400, which is only ever a memory, far out in +Z
+const mint = buildMint(scene);
+FOG[5] = mint.fog;
 const SUITE_X = 300;
 suite.group.position.x = SUITE_X;
 // The highway is the road outside the hotel. It starts under the parked
@@ -244,6 +248,119 @@ const tp = {};
 function clearTraffic() {
   traffic.forEach((V) => { V.active = false; V.mesh.visible = false; });
 }
+/* ------------------------------------------------ the highway patrol
+   The book's stop on the road out: somewhere in the empty middle of the
+   drive a black-and-white comes up behind you with its lamps going. Stop
+   -- anywhere, the shoulder or the lane, however hard -- and he pulls in
+   behind you and walks up to the window. Keep going and he sits on your
+   bumper for half a minute, then drops back to his radio. Once a game: a
+   wreck on the way out before he has had his word puts him back on the
+   road for next time. */
+const COP_AT = 1150;                 // metres out of town when he finds you
+const COP_GIVES_UP = 30;             // seconds of not stopping
+const cop = { state: 'idle', s: 0, lat: LANE, v: 0, t: 0, siren: 0, mesh: makePatrolCar() };
+cop.mesh.visible = false;
+desert.group.add(cop.mesh);
+function copReset() {
+  if (cop.state !== 'done') {
+    cop.state = 'idle';
+    game.resetTask('chp');
+  }
+  cop.mesh.visible = false;
+}
+function placeCop() {
+  roadPoint(cop.s, cop.lat, tp);
+  cop.mesh.position.set(tp.x, tp.y, tp.z);
+  cop.mesh.rotation.y = tp.heading;
+  cop.mesh.rotation.x = Math.atan(tp.slope);
+}
+/** outbound only. Returns true while he has you stopped. */
+function updateCop(dt) {
+  const ps = -(car.pos.z - DESERT_Z);
+  const plat = latOf(car.pos.x, car.pos.z);
+  if (cop.state === 'idle') {
+    if (ps < COP_AT || car.final || car.speed < 8) return false;
+    cop.state = 'chase';
+    cop.s = ps - 100; cop.lat = plat; cop.v = car.speed + 14; cop.t = 0; cop.siren = 0;
+    cop.mesh.visible = true;
+    // the other lane is his for this: nobody coming the other way
+    clearTraffic();
+    game.activate('chp');
+    game.fear = clamp(game.fear + 0.12);
+    game.say('Red lamps in the mirror, coming up fast. Highway patrol. '
+      + 'Stop the car -- or see how far he wants it.', null, 7);
+  }
+  // the lamps take turns, whatever he is doing
+  const lit = Math.floor(clock * 5) % 2;
+  cop.mesh.userData.lamps[0].color.setHex(lit ? 0xff2a1a : 0x400808);
+  cop.mesh.userData.lamps[1].color.setHex(lit ? 0x400808 : 0xff2a1a);
+  if (cop.state === 'chase') {
+    cop.t += dt;
+    const gap = ps - cop.s;
+    // Closes fast from a distance and sits on your bumper. You cannot turn
+    // round far enough in the seat to see him there, so after a few
+    // seconds of that he pulls out and comes up alongside, in the other
+    // lane, where he is at the edge of the windscreen with his lamps going.
+    const beside = cop.t > 5 && gap < 30;
+    const stay = beside ? -1.5 : 12;
+    const want = car.speed + clamp((gap - stay) * 0.7, -6, 20);
+    cop.v += clamp(want - cop.v, -9 * dt, 9 * dt);
+    cop.s += Math.max(0, cop.v) * dt;
+    const wantLat = beside ? plat - 3.8 : plat;
+    cop.lat += (wantLat - cop.lat) * Math.min(1, dt * 1.2);
+    // and never through you
+    if (Math.abs(cop.lat - plat) < 2.4 && ps - cop.s < 11) cop.s = ps - 11;
+    cop.siren -= dt;
+    if (cop.siren <= 0) {
+      cop.siren = 1.8;
+      audio.siren(0.1 / (1 + Math.max(0, gap - 10) * 0.02), 0);
+    }
+    placeCop();
+    if (car.speed < 0.5 && gap < 60) {
+      // stopped. He rolls up behind you and gets out.
+      cop.state = 'pull'; cop.t = 0;
+      game.say('He pulls in behind you. The door opens. The door shuts.', null, 4);
+    } else if (cop.t > COP_GIVES_UP) {
+      cop.state = 'gone'; cop.t = 0;
+      game.copRan = true;
+      game.fear = clamp(game.fear + 0.2);
+      game.loathing = clamp(game.loathing + 0.08);
+      game.completeTask('chp');
+      game.say('The lamps fall back, and then they go out. He has a radio, though, '
+        + 'and yours is the only red convertible in the state.', null, 7);
+    }
+    return false;
+  }
+  if (cop.state === 'pull') {
+    cop.t += dt;
+    // he drops back and tucks in behind you, where a patrol car stops
+    const target = ps - 11;
+    cop.s += (target - cop.s) * Math.min(1, dt * 1.6);
+    cop.lat += (plat - cop.lat) * Math.min(1, dt * 1.6);
+    placeCop();
+    if (cop.t > 2.2 && !game.dlg) { cop.state = 'talk'; game.openDialogue('chp'); }
+    return true;
+  }
+  if (cop.state === 'talk') {
+    if (game.dlg) return true;
+    // however it ended -- even saying nothing until he gave up on you
+    game.completeTask('chp');
+    cop.state = 'done'; cop.t = 0;
+    return false;
+  }
+  if (cop.state === 'gone') {
+    cop.t += dt;
+    cop.v = Math.max(0, cop.v - 6 * dt);
+    cop.s += cop.v * dt;
+    placeCop();
+    if (ps - cop.s > 400) { cop.mesh.visible = false; cop.state = 'done'; }
+    return false;
+  }
+  // done: parked where he stopped you until he is out of sight
+  if (cop.mesh.visible && ps - cop.s > 400) cop.mesh.visible = false;
+  return false;
+}
+
 /** @param dir +1 driving out (south), -1 driving back. Returns true on a crash. */
 function updateTraffic(dt, dir) {
   const ps = -(car.pos.z - DESERT_Z);
@@ -251,7 +368,7 @@ function updateTraffic(dt, dir) {
   for (const V of traffic) {
     if (!V.active) {
       V.cool -= dt;
-      if (V.cool > 0 || car.speed < 6) continue;
+      if (V.cool > 0 || car.speed < 6 || cop.state === 'chase' || cop.state === 'pull' || cop.state === 'talk') continue;
       const s = ps + dir * (420 + Math.random() * 280);
       // never in town, and never in the motel lot
       if (s < 320 || s > ROAD.length - 320) { V.cool = 3; continue; }
@@ -526,6 +643,8 @@ const OBJECTIVE_AT = {
     ? new THREE.Vector3((world.frontage.DOOR.x0 + world.frontage.DOOR.x1) / 2, 1.6, world.LOB_Z1)
     : carDoorPoint()),
   drive:     () => new THREE.Vector3(DESERT_X, 2.5, DESERT_Z + desert.end),
+  chp:       () => (cop.mesh.visible && cop.state !== 'done' && cop.state !== 'gone'
+    ? cop.mesh.getWorldPosition(new THREE.Vector3()).setY(1.6) : null),
   callback:  () => new THREE.Vector3(DESERT_X + desert.phone.x, 1.5, DESERT_Z + desert.phone.z),
   // (or, after a wreck on the way back, the lounge door to the convention)
   return:    () => (game.act === 1 ? LOUNGE_DOOR_AT
@@ -669,7 +788,15 @@ function interact() {
   } else if (f.kind === 'phone') {
     game.openDialogue('phone');
   } else if (f.kind === 'typewriter') {
-    game.fileStory();
+    // steady enough to write, and nothing yet to write about: the race
+    if (game.composure >= STORY_COMPOSURE && game.taskState('mint') !== 'done') {
+      audio.door();
+      game.say('You put a sheet in the machine and type THE MINT 400, and then you '
+        + 'sit there trying to remember what it looked like.', null, 4);
+      fadeThrough(startMint, 3);
+    } else {
+      game.fileStory();
+    }
   } else if (f.kind === 'bar') {
     game.buyDrink('tequila');
   } else if (f.kind === 'elevator') {
@@ -753,6 +880,7 @@ function findFocus() {
     return;
   }
 
+  if (mintOn) { focusTarget = null; game.setPrompt(null); return; }
   if (game.act === 2) {
     consider('npc', gonzo, gonzo.group.position, 3.0,
       game.taskState('bath') === 'done' ? 'YOUR ATTORNEY' : 'YOUR ATTORNEY, IN THE BATH',
@@ -1157,6 +1285,7 @@ function wakeAtBar() {
   const leg = car.returning ? 'return' : game.finale ? 'final' : 'out';
   leaveCar();
   clearTraffic();
+  copReset();
   const at = world.frontage.car;
   car.stage = null; car.returning = false; car.parked = false; car.arrived = false;
   car.final = false; car.speed = 0; car.wheel = 0; car.kick = 0; car.offRoad = 0;
@@ -1271,7 +1400,7 @@ function getInCar() {
 function startActThree() {
   // Same reconciliation the suite does for the casino: once the car is
   // moving there is no going back for anything left unfinished.
-  ['bath', 'maid', 'story', 'downstairs', 'checkout'].forEach((id) => game.completeTask(id));
+  ['bath', 'maid', 'mint', 'story', 'downstairs', 'checkout'].forEach((id) => game.completeTask(id));
   game.leaving = false;
   // the last time out it is morning, the bill is settled, and it is one way
   car.final = game.finale;
@@ -1637,6 +1766,81 @@ function updateFade(dt) {
   if (fade.t >= fade.secs) { game.blackout = 1; fade = null; }
 }
 
+/* ------------------------------------------------ the Mint 400
+   What the story is supposed to be about. You sit down at the typewriter
+   and the room goes, and you are back at the pits that morning with the
+   dust coming across the track like weather. Three of the machines, seen
+   with your own eyes -- or a minute and a half of engines going by in a
+   cloud -- and you are back at the desk with whatever you have. */
+let mintOn = false;
+let mintT = 0;
+const MINT_SECS = 90;
+const mintFwd = new THREE.Vector3();
+function startMint() {
+  mintOn = true;
+  mintT = 0;
+  mint.reset();
+  suite.hide();
+  gonzo.group.visible = false;
+  mint.show();
+  scene.fog = FOG[5];
+  renderer.setClearColor(mint.fog.color, 1);
+  audio.ambience = 'desert';
+  player.pos.set(MINT.x + MINT_SPAWN.x, 1.72, MINT.z + MINT_SPAWN.z);
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = 0;                 // facing the rail and the track beyond it
+  player.pitch = 0;
+  game.activate('mint');
+  game.mintSeen = [];
+  game.say('That morning. The Mint 400: the richest off-road race in the history of '
+    + 'organised sport, and you can see about thirty feet. Get to the rail. Get a look at something.', null, 8);
+}
+function updateMint(dt, s2) {
+  mintT += dt;
+  // how far into it you can see is how well you can see: sober, the rail
+  // and not much past it; on the mescaline, half the back straight
+  const see = 7 + 36 * s2.perception;
+  mint.fog.density = 1.38 / see;
+  camera.getWorldDirection(mintFwd);
+  const { seen, passes } = mint.update(dt, clock, camera.position, mintFwd, see);
+  for (const r of passes) {
+    const side = Math.sin(Math.atan2(-r.toR.x, -r.toR.z) - player.yaw);
+    audio.bike(0.09 / (1 + r.d * 0.04), clamp(-side, -0.9, 0.9));
+  }
+  for (const r of seen) {
+    if (game.mintSeen.length >= 3) break;
+    game.mintSeen.push(r.def);
+    audio.good();
+    game.toast(`#${r.def.n} — IN THE NOTEBOOK (${game.mintSeen.length}/3)`, 'good');
+    game.say(`Out of the dust: ${r.def.what}.`, null, 5);
+  }
+  if (!fade && (game.mintSeen.length >= 3 || mintT > MINT_SECS)) {
+    if (game.mintSeen.length < 3) {
+      game.say('Then the dust closes over all of it, and the morning is gone.', null, 4);
+    }
+    fadeThrough(endMint, 3.4);
+  }
+}
+function endMint() {
+  mintOn = false;
+  mint.hide();
+  suite.show();
+  gonzo.group.visible = true;
+  scene.fog = FOG[2];
+  renderer.setClearColor(0x000000, 1);
+  audio.ambience = 'suite';
+  // back in the chair, facing the machine
+  player.pos.set(SUITE_X + 4.9, 1.72, -1.6);
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = 0;
+  player.pitch = -0.25;
+  game.completeTask('mint');
+  // and it all comes out at once, whatever the chemistry says now
+  game.fileStory(true);
+}
+
 /* Where the car is allowed to be, and what it costs to be anywhere else.
    Three places with three sets of rules:
      the motor court   paved all round; the kerb, the island and the canopy
@@ -1724,7 +1928,9 @@ function driveCar(dt, s) {
   // at the motel you are stopping, and straightening up to do it
   const assist = car.arrived ? clamp(-relHeading(car.heading, car.pos.z) * 0.8, -0.2, 0.2) : 0;
   prevPos.copy(car.pos);
-  stepCar(dt, s, { brake: car.arrived, assist, rough: off > 0 && car.pos.z < DESERT_Z - COURT.mouth ? 0.03 : 0 });
+  // stopped by the highway patrol, the car stays stopped until he is done
+  const held = updateCop(dt);
+  stepCar(dt, s, { brake: car.arrived || held, assist, rough: off > 0 && car.pos.z < DESERT_Z - COURT.mouth ? 0.03 : 0 });
   if (roadRules(dt, 1)) return;
   placeCar();
   if (updateTraffic(dt, 1)) return;
@@ -1748,6 +1954,10 @@ function driveCar(dt, s) {
   if (car.arrived && car.speed < 0.3 && !car.parked) {
     // and then you get out, because the phone is not going to walk over
     clearTraffic();
+    // the patrolman has gone about his day; he is not there on the way back
+    // (and if he was still on your tail, the motel is where he lost interest)
+    cop.mesh.visible = false;
+    if (cop.state !== 'idle' && cop.state !== 'done') { game.completeTask('chp'); cop.state = 'done'; }
     car.speed = 0;
     car.parked = true;
     const out = new THREE.Vector3(-1.9, 0, 0).applyAxisAngle(THREE.Object3D.DEFAULT_UP, car.heading);
@@ -1799,6 +2009,12 @@ function driveBack(dt, s) {
 }
 
 function collide(p) {
+  // the Mint: the pits, behind the rail. The track is theirs.
+  if (mintOn) {
+    p.x = MINT.x + clamp(p.x - MINT.x, PITS.x0, PITS.x1);
+    p.z = MINT.z + clamp(p.z - MINT.z, PITS.z0, PITS.z1);
+    return;
+  }
   // ACT THREE is a parking lot in the middle of nothing. There is no
   // geometry to push against and, more to the point, the casino's own
   // containment would drag the player 900m back across the map.
@@ -1815,8 +2031,8 @@ function collide(p) {
     for (const c of desert.colliders) push(DESERT_X + c.x, DESERT_Z + c.z, c.hw, c.hd);
     if (car.parked) push(car.pos.x, car.pos.z, 1.0, 2.7);
     const lx = p.x - DESERT_X;
-    p.x = DESERT_X + clamp(lx, -30, 22);
-    p.z = clamp(p.z, DESERT_Z + desert.end - 16, DESERT_Z + desert.end + 40);
+    p.x = DESERT_X + clamp(lx, -40, 33);
+    p.z = clamp(p.z, DESERT_Z + desert.end - 19, DESERT_Z + desert.end + 40);
     return;
   }
 
@@ -2224,6 +2440,8 @@ function tick(dt, draw = true) {
     // the lounge there is only quiet music
     audio.ambience = player.pos.z < F.PAVE_Z ? 'street'
       : player.pos.x > world.lounge.X0 ? 'lounge' : 'casino';
+  } else if (game.act === 2 && mintOn) {
+    updateMint(dt, s2);
   } else if (game.act === 2) {
     gonzo.update(clock, s2, player.pos, focusTarget?.obj === gonzo);
     updateMaid(dt, s2);
@@ -2325,6 +2543,9 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       pos: [+player.pos.x.toFixed(1), +player.pos.z.toFixed(1)],
       yaw: +player.yaw.toFixed(2),
       car: [+car.speed.toFixed(2), +(car.wheel || 0).toFixed(3), +(car.heading || 0).toFixed(3), car.stage],
+      carAt: [+car.pos.x.toFixed(2), +car.pos.z.toFixed(2)], desertAt: [+DESERT_X.toFixed(2), +DESERT_Z.toFixed(2)],
+      cop: [cop.state, +(-(car.pos.z - DESERT_Z) - cop.s).toFixed(1)],
+      mint: mintOn ? [+mintT.toFixed(1), (game.mintSeen || []).length, +mint.fog.density.toFixed(3)] : null,
       cam: [+camera.fov.toFixed(1), +camera.rotation.z.toFixed(3), +head.yaw.toFixed(2)],
       phantom: phantom.active, bats: roadBats.points.visible,
       // what a screenshot needs to know: is the picture mid-cut to black
@@ -2364,6 +2585,14 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       }
       if (c.freeze) game.dlg && (game.dlg.t = 9999);   // stop the timer while testing
       if (c.act3) { if (!car.stage) getInCar(); }
+      if (c.mint && game.act === 2 && !mintOn) startMint();
+      // the car, anywhere down the road, at any speed (the long drive, skipped)
+      if (c.carTo !== undefined && car.stage) {
+        roadPoint(c.carTo, c.carLat ?? 1.6, tp);
+        car.pos.set(DESERT_X + tp.x, 0, DESERT_Z + tp.z);
+        car.heading = tp.heading + (car.returning ? Math.PI : 0);
+        if (c.carSpeed !== undefined) car.speed = c.carSpeed;
+      }
       // straight into the convention, and straight out of it
       if (c.act4) startActFour();
       if (c.finale && game.act === 4) startFinale();
@@ -2577,6 +2806,11 @@ function precompile() {
   r.compile(scene, camera);
   scene.remove(gonzo.group, maid.group);
   suite.hide();
+  // the Mint, in its dust
+  mint.show();
+  scene.fog = FOG[5];
+  r.compile(scene, camera);
+  mint.hide();
   // the road -- with the hotel still standing at the end of it, which is
   // how it is both out front on the way out and for the whole drive
   world.root.visible = true;
