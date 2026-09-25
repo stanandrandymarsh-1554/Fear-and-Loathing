@@ -152,7 +152,8 @@ async function shot(name, frames = 1) {
   if (!r) { problems.push(`${base}: the shot command produced no image`); return; }
   fs.writeFileSync(path.join(OUT, base + '.png'), Buffer.from(r.url.split(',')[1], 'base64'));
   // the loop is held, so the compositor is idle and this is quick
-  await page.screenshot({ path: path.join(OUT, base + '-hud.png'), timeout: 60000,
+  // 120s: under SwiftShader a busy frame has taken over 40 to composite
+  await page.screenshot({ path: path.join(OUT, base + '-hud.png'), timeout: 120000,
                           animations: 'disabled', caret: 'hide' });
   // Two ways to be black. A frame that never rendered is caught by its
   // pixels. A frame mid-fade is not: the fade is applied before the gamma

@@ -6,7 +6,8 @@
 
      on foot   Tilt the top of the phone away from you to walk, towards
                you to back up. Tilt it left or right to look round that
-               way. Turn the screen like a wheel -- anticlockwise, or
+               way: the end that goes away from you, and down, is the way
+               you turn. Turn the screen like a wheel -- anticlockwise, or
                clockwise -- to step sideways. Every one of them is a
                held position, not a flick: hold it there and it keeps
                going, bring it back to the middle and it stops.
@@ -42,7 +43,7 @@ export const touch = {
   denied: false,
   lean: 0, lean0: 0,   // radians: leaned back from facing you, now and at rest
   wheel: 0,            // + turned anticlockwise from the resting hold
-  look: 0,             // + turned to look left of the resting hold
+  look: 0,             // + right-hand end gone away from you (and down): looks right
   dragX: 0, dragY: 0,  // dragged since last sample, px
   gas: false, brake: false,       // thumbs on either half, in the car
   fingers: new Map(),
@@ -54,10 +55,11 @@ const q = new THREE.Quaternion();
 const qScreen = new THREE.Quaternion();
 // the camera looks out of the back of the phone, not out of its top
 const qBack = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-const Z = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
+const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
 const right = new THREE.Vector3(), normal = new THREE.Vector3(), rel = new THREE.Vector3();
 // the resting hold, and which way it faces
 const rest = new THREE.Quaternion(), restInv = new THREE.Quaternion(), turnRest = new THREE.Quaternion();
+const leanBy = new THREE.Quaternion();
 let hasRest = false, restHeading = 0, heading = 0, lastT = 0;
 
 function screenAngle() {
@@ -86,10 +88,13 @@ function onOrientation(e) {
   touch.lean = Math.atan2(normal.y, toYou);
   if (!hasRest) recentre();
 
-  // The long edge, as the resting hold sees it. Turned like a wheel, it
-  // swings up the face of the screen (y); turned about the short axis, it
-  // swings out of the face (z). Leaning forward to walk moves neither.
-  rel.copy(right).applyQuaternion(restInv.copy(rest).invert());
+  // The long edge, as the resting hold sees it -- leaned forward or back
+  // by as much as you are leaning it now, or walking and looking round at
+  // once reads as a turn of the wheel. Turned like a wheel, the edge swings
+  // up the face of the screen (y); turned about the short axis, it swings
+  // out of the face (z). Leaning it, about that edge, moves neither.
+  restInv.copy(rest).multiply(leanBy.setFromAxisAngle(X, touch.lean0 - touch.lean)).invert();
+  rel.copy(right).applyQuaternion(restInv);
   touch.wheel = Math.atan2(rel.y, rel.x);
   touch.look = Math.atan2(-rel.z, rel.x);
 
@@ -181,7 +186,7 @@ function onEnd(e) {
 function pedals() {
   let gas = false, brake = false;
   for (const f of touch.fingers.values()) {
-    if (f.target.closest?.('#case-btn, #inventory, #tasks, #dialogue')) continue;
+    if (f.target.closest?.('#case-btn, #inventory, #tasks, #dialogue, #tilt, #tilt-read')) continue;
     if (f.left) brake = true; else gas = true;
   }
   touch.gas = gas; touch.brake = brake;
@@ -206,22 +211,35 @@ export function initTouch(h) {
      run            tipped well past a walk
      turn           radians to turn this frame, + is left
      steer          -1..1, + is left, the way the car's A key turns it
-     tilt, wheel    the on-screen level: the bubble, and the ring's turn */
+     tilt, wheel    the on-screen level: the bubble, and the ring's turn
+     raw            degrees, for the readout: lean, look (+ right), wheel
+
+   HANDS ARE NOT GIMBALS. Tilting a phone to look round rolls it a few
+   degrees like a wheel as well, and leaning it forward to walk does too,
+   and that was stepping you sideways the whole time. So each motion's
+   dead zone widens while another one is plainly in use: a deliberate
+   wheel-turn still strafes, a wobble on the way past does not. */
 export function sampleTouch(dt) {
   const lean = (touch.lean - touch.lean0) / DEG;
-  const wheel = touch.wheel / DEG, look = touch.look / DEG;
+  const wheel = touch.wheel / DEG;
+  // The first cut had this the other way round, and on the phone it was
+  // backwards: tilt the phone right, look right.
+  const lookRight = touch.look / DEG;
   const r = touch.ready;
+  const deadLook = 8 + 0.5 * Math.abs(wheel);
+  const deadWheel = 10 + 0.6 * Math.abs(lookRight) + 0.3 * Math.abs(lean);
   // a small tilt is a slow look round, a big one a fast one
-  const L = r ? ramp(look, 6, 30) : 0;
+  const L = r ? ramp(lookRight, deadLook, deadLook + 24) : 0;
   const out = {
     dragX: touch.dragX, dragY: touch.dragY,
-    walk: r ? ramp(lean, 7, 22) : 0,
-    strafe: r ? -ramp(wheel, 7, 24) : 0,
-    run: r && lean > 32,
-    turn: L * Math.abs(L) * 2.6 * dt,
+    walk: r ? ramp(lean, 8, 23) : 0,
+    strafe: r ? -ramp(wheel, deadWheel, deadWheel + 16) : 0,
+    run: r && lean > 33,
+    turn: -L * Math.abs(L) * 2.4 * dt,
     steer: r ? ramp(wheel, 2.5, 30) : 0,
-    tilt: [clamp(-look / 30, -1, 1), clamp(-lean / 30, -1, 1)],
+    tilt: [clamp(lookRight / 32, -1, 1), clamp(-lean / 30, -1, 1)],
     wheel: r ? clamp(wheel, -60, 60) : 0,
+    raw: [lean, lookRight, wheel],
     gas: touch.gas, brake: touch.brake,
   };
   touch.dragX = 0; touch.dragY = 0;
