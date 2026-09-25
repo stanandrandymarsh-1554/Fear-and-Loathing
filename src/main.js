@@ -1585,7 +1585,11 @@ function phoneInput() {
 
   if (driving) {
     // straight ahead is however you were holding it as you got in
-    if (!phoneDriving) centreWheel();
+    if (!phoneDriving) {
+      centreWheel();
+      game.say('Tip the phone like a wheel to steer. Left thumb up to go, down to brake '
+        + '-- or hold the right thumb down for gas.', null, 6);
+    }
     // The wheel. The car only knows A and D, so the phone works them: held
     // while the wheel is short of where the phone is, let go once it is
     // there. The lock is stepCar's own, so a phone tipped halfway puts the
@@ -1594,7 +1598,9 @@ function phoneInput() {
     keys.KeyS = t.brake;
     const v = Math.abs(car.speed);
     const lock = 0.55 / (1 + Math.max(0, v - 4) * 0.4 + v * v * 0.012);
-    const err = t.steer * lock - (car.wheel || 0);
+    // the stick steers too, if it is pushed sideways with any conviction
+    const steer = Math.abs(t.strafe) > 0.3 ? -t.strafe : t.steer;
+    const err = steer * lock - (car.wheel || 0);
     keys.KeyA = err > 0.012;
     keys.KeyD = err < -0.012;
     phoneDriving = true;

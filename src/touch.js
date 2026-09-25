@@ -19,8 +19,11 @@
                anything to use it.
      driving   the racing-game standard (Asphalt, Real Racing): tip the
                phone like a wheel, read as its roll against gravity, zeroed
-               when you get in. Gravity does not drift. The right thumb is
-               the gas and the left thumb is the brake.
+               when you get in. Gravity does not drift. The left thumb is
+               the same stick as on foot -- up to go, down to brake and
+               then reverse -- and a right thumb held anywhere is gas too.
+               (The left thumb used to be a plain brake pedal, so a thumb
+               put down the way you walk sat there reversing.)
    ============================================================ */
 import * as THREE from 'three';
 
@@ -36,7 +39,7 @@ export const touch = {
   roll: 0, roll0: 0,   // the wheel: + anticlockwise, and where it sits at rest
   dragX: 0, dragY: 0,  // right-hand drag since last sample, px
   stick: { x: 0, y: 0, run: false },
-  gas: false, brake: false,
+  gas: false,
   fingers: new Map(),
 };
 
@@ -142,7 +145,7 @@ function onStart(e) {
     const f = { x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY,
       t0: now, moved: false, left, target: e.target, stick: false };
     // the left thumb, down on the view, is the stick -- one at a time
-    if (left && e.target.id === 'gl' && stickId === null && !handlers.driving?.()) {
+    if (left && e.target.id === 'gl' && stickId === null) {
       f.stick = true; stickId = t.identifier; stickX = t.clientX; stickY = t.clientY;
       showStick(true);
     }
@@ -192,14 +195,11 @@ function onEnd(e) {
   pedals();
 }
 
-/** in the car, a thumb held on either half of the screen */
+/** in the car, a right thumb held on the view is the gas */
 function pedals() {
-  let gas = false, brake = false;
-  for (const f of touch.fingers.values()) {
-    if (f.target.closest?.('#case-btn, #inventory, #tasks, #dialogue')) continue;
-    if (f.left) brake = true; else gas = true;
-  }
-  touch.gas = gas; touch.brake = brake;
+  let gas = false;
+  for (const f of touch.fingers.values()) if (!f.left && f.target.id === 'gl') gas = true;
+  touch.gas = gas;
 }
 
 export function initTouch(h) {
@@ -221,7 +221,9 @@ export function initTouch(h) {
      dragX, dragY   px dragged by any finger that is not the stick
      walk, strafe   -1..1 from the stick, + forward / right
      run            the stick pushed past its ring
-     steer          -1..1, + is left, the way the car's A key turns it */
+     steer          -1..1, + is left, the way the car's A key turns it
+     gas, brake     the car's pedals: the stick up or a right thumb, the
+                    stick down */
 export function sampleTouch() {
   const s = touch.stick;
   // a little dead zone in the middle of the stick, rescaled so the edge
@@ -236,7 +238,7 @@ export function sampleTouch() {
     dragX: touch.dragX, dragY: touch.dragY,
     walk: -s.y * k, strafe: s.x * k, run: s.run,
     steer: touch.ready ? Math.sign(roll) * clamp((Math.abs(roll) - 2) / 28, 0, 1) : 0,
-    gas: touch.gas, brake: touch.brake,
+    gas: touch.gas || -s.y * k > 0.3, brake: s.y * k > 0.3,
   };
   touch.yaw = touch.pitch = 0;
   touch.dragX = touch.dragY = 0;
