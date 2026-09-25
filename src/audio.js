@@ -38,6 +38,7 @@ export class Audio {
   /* ---------------------------------------------------- boot */
   start() {
     if (this.ready) return;
+    this._claimSpeaker();
     const AC = window.AudioContext || window.webkitAudioContext;
     const ctx = (this.ctx = new AC());
     this.t0 = ctx.currentTime;
@@ -99,10 +100,57 @@ export class Audio {
     out.gain.exponentialRampToValueAtTime(0.9, ctx.currentTime + 2.5);
 
     this.ready = true;
+
+    // Safari parks the context in 'interrupted' whenever something else
+    // takes the speaker for a moment: the motion-access prompt at the start,
+    // a notification, the phone locking. Nothing brings it back on its own,
+    // so every touch, click and key, and coming back to the tab, tries again.
+    const wake = () => this.resume();
+    for (const e of ['pointerdown', 'touchend', 'keydown']) addEventListener(e, wake, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+    ctx.onstatechange = () => { if (ctx.state === 'interrupted') wake(); };
+  }
+
+  /* An iPhone plays Web Audio as "ambient" sound, which the ring/silent
+     switch mutes -- so with the switch on the game was silent, while a
+     video on the same page would have played. Asking for the "playback"
+     session instead (Safari 16.4 on) plays through the switch, as a game
+     or a video does. Older iPhones have no way to ask, but a looping
+     silent <audio> element started from the same tap moves the page onto
+     the playback session all the same. */
+  _claimSpeaker() {
+    try {
+      if (navigator.audioSession) { navigator.audioSession.type = 'playback'; return; }
+    } catch { /* read-only in some builds: fall through */ }
+    if (!/iP(hone|ad|od)/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))) return;
+    try {
+      const el = document.createElement('audio');
+      el.setAttribute('x-webkit-airplay', 'deny');
+      el.preload = 'auto';
+      el.loop = true;
+      el.src = URL.createObjectURL(new Blob([this._silentWav()], { type: 'audio/wav' }));
+      el.play().catch(() => {});
+      this._keepAlive = el;
+    } catch { /* no element, no harm: the switch just stays in charge */ }
+  }
+
+  /* half a second of silence as a WAV file: 8 kHz, 8-bit, mono */
+  _silentWav() {
+    const n = 4000, b = new DataView(new ArrayBuffer(44 + n));
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) b.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); b.setUint32(4, 36 + n, true); str(8, 'WAVE');
+    str(12, 'fmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+    b.setUint32(24, 8000, true); b.setUint32(28, 8000, true); b.setUint16(32, 1, true); b.setUint16(34, 8, true);
+    str(36, 'data'); b.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) b.setUint8(44 + i, 128);
+    return b.buffer;
   }
 
   resume() {
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    const ctx = this.ctx;
+    // 'interrupted' is Safari's own state, and needs waking as much as 'suspended'
+    if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume()?.catch?.(() => {});
+    if (this._keepAlive && this._keepAlive.paused) this._keepAlive.play().catch(() => {});
   }
 
   /* ------------------------------------------------ builders */

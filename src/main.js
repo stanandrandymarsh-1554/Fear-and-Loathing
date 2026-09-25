@@ -3032,10 +3032,12 @@ resize();
 
 /* --------------------------------------------------- start */
 document.getElementById('start').addEventListener('click', () => {
-  askForMotion();
-  if (touch.on) document.getElementById('tasks').classList.add('dim');
+  // sound first: the motion-access prompt takes the speaker away while it
+  // is up, and a context made after it starts out interrupted
   audio.start();
   audio.resume();
+  askForMotion();
+  if (touch.on) document.getElementById('tasks').classList.add('dim');
   document.getElementById('title').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   started = true;
