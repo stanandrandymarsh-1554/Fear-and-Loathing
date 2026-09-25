@@ -108,8 +108,8 @@ function hill(x, z) {
     + 22 * Math.abs(Math.sin(x / 41 - z / 57));
   const range = sm(140, 460, d) * (1 - 0.55 * sm(700, 900, Math.abs(x)));
   const ahead = sm(L + 250, L + 800, s) * (90 + 40 * Math.sin(x / 70));
-  // the motel and its lot sit on level ground, west of the road
-  const lot = sm(45, 95, Math.hypot(x + 12, s - L));
+  // Baker -- the motel, the gas station and their lots -- sits on level ground
+  const lot = sm(55, 105, Math.hypot(x + 4, s - L));
   return town * lot * (sm(20, 60, d) * roll + range * ridge) + ahead;
 }
 function groundY(x, z) {
@@ -298,7 +298,10 @@ export function buildDesert(scene) {
       // the desert starts where the town gives out
       const s = TOWN.s1 + 40 + rnd() * (L - TOWN.s1);
       const side = rnd() > 0.5 ? 1 : -1;
-      const lat = side * (near + Math.pow(rnd(), 1.6) * (far - near));
+      let lat = side * (near + Math.pow(rnd(), 1.6) * (far - near));
+      // nothing grows on the lots at Baker; move it out past them instead
+      // (moved, not dropped, so the rest of the desert comes out the same)
+      if (s > L - 70 && lat > -46 && lat < 36) lat += side * 46;
       at(s, lat, 0);
       const x = place.position.x, z = place.position.z;
       fn(i, x, groundY(x, z), z);
@@ -437,64 +440,121 @@ export function buildDesert(scene) {
   sky.renderOrder = -1;
   group.add(sky);
 
-  /* ---------------------------------------------- the motel at the end
-     Baker, where the film's phone booth is. The road is straight and level
-     here, so nothing below needs to know the road ever bent. */
+  /* ---------------------------------------------- Baker, at the end
+     A wide place in the road: a motor lodge on the left, a gas station on
+     the right, and the payphone at the edge of the motel lot where a car
+     can pull onto the gravel next to it. The road is straight and level
+     here, so nothing below needs to know it ever bent. Everything is kept
+     clear of the tarmac and its shoulder (|x| < 7.6); the phone booth used
+     to stand in the southbound lane. */
   const end = -L;
   const motel = new THREE.Group();
   motel.position.set(0, 0, end);
   group.add(motel);
+  const put = (geo, m, x, y, z, parent = motel) => {
+    const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o;
+  };
+  const stucco = mat({ color: 0xe0cfae, roughness: 0.92 });
+  const trimM = mat({ color: 0x2f6f73, roughness: 0.7 });
+  const white = mat({ color: 0xece6d8, roughness: 0.6 });
+  const concrete = mat({ color: 0xb9b2a4, roughness: 1 });
+  const gravel = mat({ color: 0xa88e6c, roughness: 1 });
+  const glassM = mat({ color: 0x5d7684, roughness: 0.15, metalness: 0.3 });
+  const litM = basic({ color: 0xffe2a8 });
 
-  const blockMat = mat({ color: 0x8d7a5e, roughness: 0.95 });
-  const block = new THREE.Mesh(new THREE.BoxGeometry(26, 4.2, 9), blockMat);
-  block.position.set(-16, 2.1, -10);
-  motel.add(block);
-  // a row of doors, because a motel is a row of doors
-  const doorMat = mat({ color: 0x2f4d52, roughness: 0.7 });
+  // the lots: gravel on the motel side, concrete on the gas station's
+  const flat = (w, d, m, x, z, y = 0.012) => {
+    const o = put(new THREE.PlaneGeometry(w, d), m, x, y, z);
+    o.rotation.x = -Math.PI / 2; return o;
+  };
+  flat(34, 34, gravel, -25, -2);
+  flat(26, 26, concrete, 21, -3);
+
+  /* the MOTOR LODGE: a row of rooms under a flat roof that runs out over a
+     walkway on posts, a door and a window for every room, and the office
+     at the end nearest the road with its light on */
+  const MX = -27, MZ = -14;                       // middle of the room block
+  put(new THREE.BoxGeometry(26, 3.6, 8), stucco, MX, 1.8, MZ);
+  put(new THREE.BoxGeometry(27.5, 0.4, 11.2), white, MX, 3.8, MZ + 1.6);      // the roof
+  put(new THREE.BoxGeometry(27.5, 0.5, 0.2), trimM, MX, 3.75, MZ + 7.2);      // its fascia
+  flat(26, 3.2, concrete, MX, MZ + 5.6, 0.03);                                // the walkway
+  for (let i = 0; i < 8; i++) put(new THREE.BoxGeometry(0.16, 3.6, 0.16), white, MX - 12.6 + i * 3.6, 1.8, MZ + 7);
   for (let i = 0; i < 7; i++) {
-    const d = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.2, 0.16), doorMat);
-    d.position.set(-27 + i * 3.6, 1.1, -5.6);
-    motel.add(d);
+    const x = MX - 11 + i * 3.6, fz = MZ + 4.02;
+    put(new THREE.BoxGeometry(1.0, 2.15, 0.08), trimM, x, 1.08, fz);
+    // a window with the curtains drawn; a couple of them have somebody up
+    const w = put(new THREE.PlaneGeometry(1.3, 0.9), i === 2 || i === 5 ? litM : glassM, x + 1.4, 1.6, fz + 0.01);
+    w.userData.win = true;
   }
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(26, 0.3, 2.4),
-    mat({ color: 0x6b3b2a, roughness: 0.9 }));
-  canopy.position.set(-16, 2.9, -4.6);
-  motel.add(canopy);
-  // a gravel lot in front of it
-  const lot = new THREE.Mesh(new THREE.PlaneGeometry(40, 22), mat({ color: 0x9a8062, roughness: 1 }));
-  lot.rotation.x = -Math.PI / 2;
-  lot.position.set(-14, 0.004, -2);
-  motel.add(lot);
+  // the office, closest to the road, with a window you can see into
+  put(new THREE.BoxGeometry(5, 3.4, 7), stucco, -11.5, 1.7, -12);
+  put(new THREE.BoxGeometry(5.8, 0.35, 7.8), white, -11.5, 3.55, -12);
+  put(new THREE.PlaneGeometry(3.2, 1.4), litM, -8.99, 1.7, -12.4).rotation.y = Math.PI / 2;
+  put(new THREE.BoxGeometry(0.08, 2.15, 1.0), trimM, -8.98, 1.08, -9.6);
+  const officeSign = put(new THREE.PlaneGeometry(2.6, 0.6),
+    basic({ map: neonTexture([['OFFICE', '#ff6a2d']], 256, 60), transparent: true }), -8.95, 3.0, -12.4);
+  officeSign.rotation.y = Math.PI / 2;
+  // somebody's station wagon, which has not moved since Tuesday
+  const wagon = makeVehicle('wagon', 0x7a6a4a);
+  wagon.position.set(-24, 0, -4.5);
+  wagon.rotation.y = 0.05;
+  motel.add(wagon);
 
   // the sign, which is the only thing awake
-  const signPost = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9, 0.5),
-    mat({ color: 0x4a3a2a, roughness: 0.9 }));
-  signPost.position.set(9, 4.5, -2);
-  motel.add(signPost);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 3.2),
-    basic({ map: motelSignTexture(), transparent: true }));
-  sign.position.set(9, 8.4, -2);
-  motel.add(sign);
+  const signPost = put(new THREE.BoxGeometry(0.5, 9, 0.5), mat({ color: 0x4a3a2a, roughness: 0.9 }), -9.5, 4.5, 8);
+  const sign = put(new THREE.PlaneGeometry(7.5, 3.2), basic({ map: motelSignTexture(), transparent: true }), -9.5, 8.4, 8);
   const signBack = sign.clone();
   signBack.rotation.y = Math.PI;
   motel.add(signBack);
-
-  const signLight = new THREE.PointLight(0xff6a2d, 60, 0, 2);
-  signLight.position.set(9, 8.4, 0);
+  const signLight = new THREE.PointLight(0xff6a2d, 40, 0, 2);
+  signLight.position.set(-9.5, 8.4, 10);
   motel.add(signLight);
 
-  /* the payphone, which is the reason any of this is happening */
-  const boothMat = mat({ color: 0x1d3f56, roughness: 0.5, metalness: 0.3 });
-  const booth = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.3, 0.9), boothMat);
-  booth.position.set(3.2, 1.15, -3.4);
+  /* the payphone, which is the reason any of this is happening: an
+     aluminium box with glass sides at the edge of the lot, its door toward
+     the road, the handset on the back wall and a light in the roof */
+  const PX = -9.4, PZ = -1.5;
+  const booth = new THREE.Group();
+  booth.position.set(PX, 0, PZ);
   motel.add(booth);
-  const phoneFace = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2),
-    mat({ color: 0x141414, roughness: 0.6 }));
-  phoneFace.position.set(3.2, 1.45, -2.92);
-  motel.add(phoneFace);
-  const boothLight = new THREE.PointLight(0xbfe4ff, 14, 0, 2);
-  boothLight.position.set(3.2, 2.5, -3.0);
+  const alu = mat({ color: 0xc9ccc8, roughness: 0.35, metalness: 0.4 });
+  [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].forEach(([dx, dz]) =>
+    put(new THREE.BoxGeometry(0.08, 2.3, 0.08), alu, dx, 1.15, dz, booth));
+  put(new THREE.BoxGeometry(1.1, 0.22, 1.1), alu, 0, 2.4, 0, booth);
+  const pane = mat({ color: 0xbcd8e4, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.28, depthWrite: false });
+  put(new THREE.BoxGeometry(0.02, 2.1, 1.0), pane, 0.5, 1.15, 0, booth);     // the door, facing the road
+  put(new THREE.BoxGeometry(1.0, 2.1, 0.02), pane, 0, 1.15, 0.5, booth);
+  put(new THREE.BoxGeometry(1.0, 2.1, 0.02), pane, 0, 1.15, -0.5, booth);
+  put(new THREE.BoxGeometry(0.06, 2.1, 1.0), alu, -0.5, 1.15, 0, booth);     // the back wall
+  put(new THREE.BoxGeometry(0.16, 0.7, 0.42), mat({ color: 0x141414, roughness: 0.6 }), -0.4, 1.4, 0, booth);
+  const phoneSign = put(new THREE.BoxGeometry(1.12, 0.22, 1.12),
+    basic({ map: neonTexture([['TELEPHONE', '#5ab4ff']], 256, 48) }), 0, 2.62, 0, booth);
+  phoneSign.userData.sign = true;
+  const boothLight = new THREE.PointLight(0xbfe4ff, 2.5, 0, 2);
+  boothLight.position.set(PX, 2.2, PZ);
   motel.add(boothLight);
+
+  /* the GAS STATION across the road, 1971: a canopy on four posts over two
+     pumps, an office with a big window, and the price on a pole */
+  const GX = 18, GZ = -4;
+  put(new THREE.BoxGeometry(9, 0.5, 8), white, GX, 4.6, GZ);
+  put(new THREE.BoxGeometry(9.1, 0.4, 8.1), mat({ color: 0xc0302a, roughness: 0.6 }), GX, 4.2, GZ);
+  [[-3.8, -3.3], [3.8, -3.3], [-3.8, 3.3], [3.8, 3.3]].forEach(([dx, dz]) =>
+    put(new THREE.BoxGeometry(0.28, 4.2, 0.28), white, GX + dx, 2.1, GZ + dz));
+  put(new THREE.BoxGeometry(1.4, 0.2, 5.6), concrete, GX, 0.1, GZ);          // the pump island
+  const pumpM = mat({ color: 0xc0302a, roughness: 0.5 });
+  [-1.6, 1.6].forEach((dz) => {
+    put(new THREE.BoxGeometry(0.7, 1.6, 0.9), pumpM, GX, 1.0, GZ + dz);
+    put(new THREE.BoxGeometry(0.72, 0.4, 0.5), white, GX, 1.95, GZ + dz);
+  });
+  put(new THREE.BoxGeometry(8, 3.4, 6), white, GX + 9, 1.7, GZ - 5);
+  put(new THREE.BoxGeometry(8.6, 0.35, 6.8), mat({ color: 0xc0302a, roughness: 0.6 }), GX + 9, 3.55, GZ - 5);
+  put(new THREE.PlaneGeometry(4.2, 1.6), litM, GX + 4.99, 1.7, GZ - 4).rotation.y = -Math.PI / 2;
+  put(new THREE.BoxGeometry(0.08, 2.15, 1.0), trimM, GX + 4.98, 1.08, GZ - 7);
+  const gasSign = put(new THREE.PlaneGeometry(3.2, 3.2),
+    basic({ map: neonTexture([['GAS', '#ff2d1f'], ['33.9¢', '#ffffff']], 256, 256), transparent: true }), 10, 7.6, 7);
+  const gasBack = gasSign.clone(); gasBack.rotation.y = Math.PI; motel.add(gasBack);
+  put(new THREE.CylinderGeometry(0.2, 0.2, 6, 8), mat({ color: 0x6a6a6a }), 10, 3, 7);
 
   /* ---------------------------------------------- the car
      A red convertible, top down: the hood and the windshield frame are
@@ -505,9 +565,14 @@ export function buildDesert(scene) {
 
   /* things you can walk into once you are on foot, desert-local x */
   const colliders = [
-    { x: 3.2, z: end - 3.4, hw: 0.5, hd: 0.45 },    // the phone booth
-    { x: -16, z: end - 10, hw: 13, hd: 4.5 },       // the motel block
-    { x: 9, z: end - 2, hw: 0.25, hd: 0.25 },       // the sign post
+    { x: PX, z: end + PZ, hw: 0.6, hd: 0.6 },             // the phone booth
+    { x: MX, z: end + MZ, hw: 13, hd: 4 },                // the rooms
+    { x: -11.5, z: end - 12, hw: 2.5, hd: 3.5 },          // the office
+    { x: -9.5, z: end + 8, hw: 0.25, hd: 0.25 },          // the sign post
+    { x: -24, z: end - 4.5, hw: 1.0, hd: 2.8 },           // the wagon
+    { x: GX, z: end + GZ, hw: 0.7, hd: 2.8 },             // the pumps
+    { x: GX + 9, z: end + GZ - 5, hw: 4, hd: 3 },         // the gas station office
+    { x: 10, z: end + 7, hw: 0.2, hd: 0.2 },              // its sign
   ];
 
   /* ---------------------------------------------- lighting
@@ -531,7 +596,7 @@ export function buildDesert(scene) {
     lights,
     car,
     colliders,
-    phone: new THREE.Vector3(3.2, 0, end - 3.4),
+    phone: new THREE.Vector3(PX, 0, end + PZ),
     // the town's moving parts, what you can hit in it, and its night light
     update: town.update,
     obstacles: town.obstacles,
@@ -578,6 +643,32 @@ export function makeVehicle(kind, color) {
     g.userData.len = long; g.userData.halfW = 0.95;
   }
   g.userData.rigid = true;
+  g.rotation.order = 'YXZ';
+  return g;
+}
+
+/* A highway patrol car, 1971: a big black sedan with white doors and roof
+   and a pair of red lamps up top that take turns. Forward is -Z, like the
+   traffic. userData.lamps are the two lamp materials, for the flashing. */
+export function makePatrolCar() {
+  const g = new THREE.Group();
+  const M = (color, r = 0.5, m = 0.15) => new THREE.MeshStandardMaterial({ color, roughness: r, metalness: m });
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const black = M(0x121216, 0.4), white = M(0xece8de, 0.45), glass = M(0x2a3a44, 0.2, 0.4);
+  add(new THREE.BoxGeometry(1.95, 0.72, 5.3), black, 0, 0.74, 0);                 // the body
+  add(new THREE.BoxGeometry(1.97, 0.5, 2.3), white, 0, 0.78, 0.2);                 // the doors
+  add(new THREE.BoxGeometry(1.75, 0.52, 2.3), glass, 0, 1.36, 0.25);               // the glasshouse
+  add(new THREE.BoxGeometry(1.78, 0.08, 2.2), white, 0, 1.64, 0.25);               // the roof
+  add(new THREE.BoxGeometry(0.9, 0.14, 0.3), M(0x2a2a2a, 0.6), 0, 1.72, -0.2);     // the bar
+  const lamps = [new THREE.MeshBasicMaterial({ color: 0x400808 }), new THREE.MeshBasicMaterial({ color: 0x400808 })];
+  add(new THREE.BoxGeometry(0.3, 0.2, 0.26), lamps[0], -0.3, 1.84, -0.2);
+  add(new THREE.BoxGeometry(0.3, 0.2, 0.26), lamps[1], 0.3, 1.84, -0.2);
+  const tyre = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12), dark = M(0x1a1616, 0.8);
+  [[-0.95, -1.7], [0.95, -1.7], [-0.95, 1.7], [0.95, 1.7]].forEach(([x, z]) => { add(tyre, dark, x, 0.4, z).rotation.z = Math.PI / 2; });
+  const head = new THREE.MeshBasicMaterial({ color: 0xfff2c8 });
+  [-0.65, 0.65].forEach((x) => { add(new THREE.CircleGeometry(0.14, 10), head, x, 0.8, -2.66).rotation.y = Math.PI; });
+  g.userData.lamps = lamps;
+  g.userData.len = 5.3; g.userData.halfW = 0.98;
   g.rotation.order = 'YXZ';
   return g;
 }

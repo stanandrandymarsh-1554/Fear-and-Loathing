@@ -562,6 +562,70 @@ const DIALOGUE = {
     },
   },
 
+  /* ------------------------------------ ACT THREE: the highway patrol
+     The book's patrolman: young, polite, and much more interested in why
+     you stopped the way you did than in how fast you were going. Every
+     way out of it lets you drive on. What it costs is the question. */
+  chp: {
+    start: 'h0',
+    nodes: {
+      h0: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'Morning. You stopped faster than anybody I have ever seen stop. '
+            + 'Do you know how fast you were going before that?',
+        time: 10,
+        options: [
+          { text: '[hand over the licence. both hands where he can see them]',
+            req: R('composure', 0.45), go: 'h1' },
+          { text: 'I was going to race you. Then I thought better of it.',
+            req: R('nerve', 0.55), go: 'h2' },
+          { text: '[offer him a beer out of the cooler]', go: 'hBad' },
+          { text: '[say nothing. grip the wheel.]', go: 'hStare' },
+        ],
+      },
+      h1: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'He reads the licence for a long time. "Long night, Mr. Duke? There is a '
+            + 'rest area twelve miles on. You are going to sleep in it. That is not a suggestion."',
+        time: 9,
+        options: [
+          { text: 'Yes, officer.', effect: { complete: 'chp', fear: -0.1 }, end: true,
+            say: 'He writes you a warning, not a ticket, and walks back to his car without looking round.' },
+        ],
+      },
+      h2: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: '"You would have won." He very nearly smiles. "That is the problem. '
+            + 'That is why I am writing you up."',
+        time: 8,
+        options: [
+          { text: '[take the ticket]', effect: { complete: 'chp', pay: 25, loathing: 0.04 }, end: true,
+            say: 'Twenty-five dollars, payable in person at a courthouse you will never see.' },
+        ],
+      },
+      hBad: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: 'He looks at the can. He looks at the seat, and at what is on the seat. '
+            + '"Sir, I want you to--" His radio says something about a pile-up forty miles back.',
+        time: 8,
+        options: [
+          { text: '[wait]', effect: { complete: 'chp', fear: 0.25, loathing: 0.1 }, end: true,
+            say: '"Go on. Get out of my county." He is already running for his car.' },
+        ],
+      },
+      hStare: {
+        who: 'THE HIGHWAY PATROLMAN',
+        line: '"Sir. Sir. Look at me." You look at him. It does not seem to help either of you.',
+        time: 8,
+        options: [
+          { text: 'Duke. Journalist. Heading home.', req: R('composure', 0.3), go: 'h1' },
+          { text: '[keep gripping the wheel]', effect: { complete: 'chp', fear: 0.2, loathing: 0.06 },
+            end: true, say: 'He writes something down, slowly, and lets you go. The something is your plate.' },
+        ],
+      },
+    },
+  },
+
   /* ------------------------------------------ out front
      The film's parking attendant, who takes the car off you on the way in
      and says the one thing you do not want to hear from anybody. */
@@ -876,12 +940,13 @@ const DIALOGUE = {
             + 'not going to read aloud.',
         time: 11,
         options: [
-          { text: '[pay it. all of it.]', cost: 450, go: 'bPaid' },
+          // the way it is done: nobody in this line of work has ever paid one
+          { text: '[smile. turn round. walk out on it. do not run.]', go: 'bRun' },
           { text: 'Charge it to the magazine. They are expecting it.',
             req: R('composure', 0.50), go: 'bMag' },
           { text: 'My attorney is handling the account.',
             req: R('nerve', 0.50), go: 'bAtty' },
-          { text: '[walk away from the desk. do not run.]', go: 'bRun' },
+          { text: '[pay it. all of it.]', cost: 450, go: 'bPaid' },
         ],
       },
       bPaid: {
@@ -910,11 +975,12 @@ const DIALOGUE = {
       },
       bRun: {
         who: 'SWAN — THE DESK',
-        line: '"Sir. Sir --" and then nothing at all, which is somehow worse.',
+        line: '"Mr. Duke? Sir. Sir --" and then nothing at all, which is somehow worse. '
+            + 'The glass doors are forty feet away and every one of them is a mile.',
         time: 6,
-        options: [{ text: '[keep walking]',
-          effect: { complete: 'bill', flag: 'billRun', fear: 0.18, loathing: 0.08 }, end: true,
-          say: 'Behind you a telephone is lifted off its cradle, very quietly.' }],
+        options: [{ text: '[keep walking. do not look back. do not run.]',
+          effect: { complete: 'bill', flag: 'billRun', fear: 0.1, loathing: 0.03 }, end: true,
+          say: 'Behind you a telephone is lifted off its cradle, very quietly. The car is out front.' }],
       },
     },
   },
@@ -952,12 +1018,14 @@ const TASK_DEFS = [
   // ---- ACT TWO. The door shuts and the trouble is already inside.
   { stage: 'room', id: 'bath',      text: 'Your attorney is in the bath. He has a request.' },
   { stage: 'room', id: 'maid',      text: 'Somebody is knocking. Get rid of them.' },
+  { stage: 'room', id: 'mint',      text: 'That morning, the Mint 400. Get to the rail and see three of them through the dust.' },
   { stage: 'room', id: 'story',     text: 'File the story. The magazine is still waiting.' },
   { stage: 'room', id: 'downstairs', text: 'Out into the hall. Take the lift back down.' },
   // ---- and out the way you came in, across the whole floor
   { stage: 'out', id: 'checkout',  text: 'Out the front doors by the desk. The car is out front.' },
   // ---- ACT THREE. Out of the city before it notices you leaving.
   { stage: 'road', id: 'drive',     text: 'Drive. Keep it between the lines until you find somewhere to stop.' },
+  { stage: 'road', id: 'chp',       text: 'Red lamps behind you. Stop and talk to the man, or outrun him.' },
   { stage: 'road', id: 'callback',  text: 'The payphone is ringing. Nobody knows you are here.' },
   { stage: 'road', id: 'return',    text: 'Drive back. The convention is waiting in the town you just left.' },
   // ---- ACT FOUR. The District Attorneys, in the ballroom off the east wing.
@@ -966,7 +1034,7 @@ const TASK_DEFS = [
   { stage: 'convention', id: 'georgia', text: 'Your attorney has found a delegate from Georgia at the coffee urn.' },
   { stage: 'convention', id: 'walkout', text: 'Out through the foyer doors, before anybody checks a badge twice.' },
   // ---- ACT FIVE. The bill, the car, and west.
-  { stage: 'last', id: 'bill',     text: 'The desk has your bill. Settle it, one way or another.' },
+  { stage: 'last', id: 'bill',     text: 'The desk has your bill. You could pay it. Nobody in your line of work ever has.' },
   { stage: 'last', id: 'westward', text: 'The car is out front. Drive west, and do not stop for the telephone.' },
 ];
 
@@ -1477,6 +1545,13 @@ export class Game {
     this._renderTasks();
   }
 
+  /** back to not yet begun, as if it never came up (a wreck undoes it) */
+  resetTask(id) {
+    const t = this.tasks.find((x) => x.id === id);
+    if (t && t.state !== 'done') t.state = 'todo';
+    this._renderTasks();
+  }
+
   taskState(id) { return this.tasks.find((x) => x.id === id)?.state; }
 
   get stage() {
@@ -1805,7 +1880,7 @@ export class Game {
   /* Back down in the lift. The same floor, the same four hundred district
      attorneys, and the only errand left is the front door. */
   leaveSuite() {
-    ['bath', 'maid', 'story'].forEach((id) => this.completeTask(id));
+    ['bath', 'maid', 'mint', 'story'].forEach((id) => this.completeTask(id));
     this.completeTask('downstairs');
     this.act = 1;
     this.leaving = true;
@@ -1818,8 +1893,10 @@ export class Game {
   /* The real ending. You do not win this by surviving the night -- the night
      was the easy part -- you win it by being able to write the thing down
      afterwards, which is the one job the chemistry cannot do for you. */
-  fileStory() {
-    if (this.composure < STORY_COMPOSURE) {
+  /** @param remembered straight back from the Mint 400, when it comes
+      out all at once and the chemistry does not get a say */
+  fileStory(remembered = false) {
+    if (!remembered && this.composure < STORY_COMPOSURE) {
       this.audio.deny();
       this.say('The keys are there. The words are not. You cannot hold a '
         + 'sentence still long enough to hit it. Wait for it to wear off, '
@@ -1834,8 +1911,16 @@ export class Game {
     // the hall, the lift, the floor, the front doors, and then the car.
     this.completeTask('story');
     this.activate('downstairs');
-    this.say('Two thousand words, most of them true, none of them the assignment. '
-      + 'Now get out of this town before somebody reads it.');
+    // what it says is what you saw out there
+    const saw = this.mintSeen || [], seen = saw.length;
+    this.say(seen >= 3
+      ? `Two thousand words, most of them true. Number ${saw[0].n}: ${saw[0].what}. `
+        + `Number ${saw[1].n}: ${saw[1].what}. Now get out of this town before somebody reads it.`
+      : seen > 0
+        ? 'Two thousand words about the dust, and in the middle of them one or two machines '
+          + 'you would swear to. The rest you make up. Now get out of this town before somebody reads it.'
+        : 'Two thousand words about the dust, and not one motorcycle in any of them, which is '
+          + 'the truest thing anybody will write about that race. Now get out of this town.', null, 9);
     return true;
   }
 
@@ -2028,7 +2113,8 @@ export class Game {
     body += this.billPaid ? ' The bill is paid, which nobody is going to believe.'
       : this.billMag ? ' The magazine gets the bill. Then the magazine gets a lawyer.'
       : this.billAtty ? ' The bill belongs to your attorney now, which is to say to nobody.'
-      : this.billRun ? ' Somewhere back there a desk clerk is still saying sir.' : '';
+      : this.billRun ? ' Somewhere back there a desk clerk is still saying sir, and a bill for '
+        + 'four hundred and fifty dollars is going to follow you across three states and never quite catch up.' : '';
     if (this.georgiaSpooked) {
       body += ' And in Georgia a district attorney is going to sleep with the lights on '
         + 'for a year.';
