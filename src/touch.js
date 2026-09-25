@@ -4,27 +4,28 @@
    Only ever switched on for a touch screen (or ?touch in the URL, for
    testing); a keyboard and a mouse never see any of this.
 
-     on foot   the phone is your head. Turn round with it and you turn
-               round. Tilt the top of it away from you to walk, towards
-               you to back up, and tip it left or right to step sideways.
-               Drag a finger to turn and look up and down from a chair.
-               Tap to do whatever the prompt says. Two fingers re-centre.
-     driving   the phone is the wheel: tip it like one. The right thumb
-               is the gas and the left thumb is the brake.
+     on foot   Tilt the top of the phone away from you to walk, towards
+               you to back up. Tilt it left or right to look round that
+               way. Turn the screen like a wheel -- anticlockwise, or
+               clockwise -- to step sideways. Every one of them is a
+               held position, not a flick: hold it there and it keeps
+               going, bring it back to the middle and it stops.
+               Drag a finger to look about, and up and down.
+               Tap to do whatever the prompt says. Two fingers re-level.
+     driving   Turn the screen like the wheel it is. The right thumb is
+               the gas and the left thumb is the brake.
 
-   HOW THE TILT IS READ. Phones held for a game sit anywhere from upright
-   to nearly flat, and the obvious reading -- yaw, pitch and roll of the
-   camera -- turns to noise as the phone lies down, just when you tip it
-   forward to walk. So each gesture is read off the one part of the phone
-   the others barely move:
-     heading   which way the long edge of the screen points, flattened
-               onto the floor. Tipping it forward does not move that,
-               and neither does raising one end.
-     sideways  how far the long edge is raised off level: one end up.
-     forward   how far the screen has leaned back from facing you. At
-               rest you hold it wherever is comfortable, so that is
-               measured from where it was when you pressed BEGIN (or
-               the last two-finger tap), not from upright.
+   HOW THE PHONE IS READ. Everything is measured against the way you were
+   holding it when you pressed BEGIN (or last tapped with two fingers),
+   and in the phone's own terms, so it works however far back you lean it:
+     forward   how far the screen has leaned back, or forward, from that
+     wheel     how far the screen has turned in its own plane, like a
+               wheel: its long edge swinging up or down across the face
+     look      how far it has turned about its own short axis: one end
+               of it coming towards you as the other goes away
+   Those three are separate motions, so each can be held on its own. And
+   because you might shift in your seat, the resting hold slowly follows
+   which way you face while the phone is sitting in the middle.
    ============================================================ */
 import * as THREE from 'three';
 
@@ -32,16 +33,17 @@ const DEG = Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /** 0 inside the dead zone, rising to 1 at full, signed */
 const ramp = (v, dead, full) => Math.sign(v) * clamp((Math.abs(v) - dead) / (full - dead), 0, 1);
+const wrap = (a) => (a > Math.PI ? a - 2 * Math.PI : a < -Math.PI ? a + 2 * Math.PI : a);
 
 const params = new URLSearchParams(location.search);
 export const touch = {
   on: params.has('touch') || matchMedia('(pointer: coarse)').matches,
   ready: false,        // motion permission granted and a reading in
   denied: false,
-  heading: 0, side: 0, lean: 0,   // radians, as read
-  side0: 0, lean0: 0,             // the resting hold
-  dYaw: 0,                        // turned since last sample
-  dragX: 0, dragY: 0,             // dragged since last sample, px
+  lean: 0, lean0: 0,   // radians: leaned back from facing you, now and at rest
+  wheel: 0,            // + turned anticlockwise from the resting hold
+  look: 0,             // + turned to look left of the resting hold
+  dragX: 0, dragY: 0,  // dragged since last sample, px
   gas: false, brake: false,       // thumbs on either half, in the car
   fingers: new Map(),
 };
@@ -52,9 +54,11 @@ const q = new THREE.Quaternion();
 const qScreen = new THREE.Quaternion();
 // the camera looks out of the back of the phone, not out of its top
 const qBack = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-const Z = new THREE.Vector3(0, 0, 1);
-const right = new THREE.Vector3(), normal = new THREE.Vector3();
-let lastHeading = null;
+const Z = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
+const right = new THREE.Vector3(), normal = new THREE.Vector3(), rel = new THREE.Vector3();
+// the resting hold, and which way it faces
+const rest = new THREE.Quaternion(), restInv = new THREE.Quaternion(), turnRest = new THREE.Quaternion();
+let hasRest = false, restHeading = 0, heading = 0, lastT = 0;
 
 function screenAngle() {
   const a = screen.orientation && typeof screen.orientation.angle === 'number'
@@ -71,31 +75,33 @@ function onOrientation(e) {
   right.set(1, 0, 0).applyQuaternion(q);     // along the screen, to the right
   normal.set(0, 0, 1).applyQuaternion(q);    // out of the screen, at you
 
-  // Which way you face, read two ways and summed. The long edge flattened
-  // onto the floor ignores a tip that raises one end; the screen's own
-  // facing ignores a tip that turns it like a wheel. Held leaning back,
-  // either tip turns the phone a little about the vertical whichever way
-  // you read it, and summing the two halves that. Each counts for as much
-  // as it lies flat, so a phone lying on its back reads off its edge alone.
-  // (a camera at yaw h has right = (cos h, 0, -sin h), and faces
-  // (-sin h, 0, -cos h), which is away from the screen)
+  // Which way you face, read off the long edge and the screen's facing
+  // together, so it holds steady from upright to nearly flat. (A camera at
+  // yaw h has right = (cos h, 0, -sin h) and faces (-sin h, 0, -cos h).)
   const fx = right.z - normal.x, fz = -right.x - normal.z;
-  const heading = Math.atan2(-fx, -fz);
-  // + when the right-hand end is up: tipped to the LEFT
-  const side = Math.asin(clamp(right.y, -1, 1));
+  heading = Math.atan2(-fx, -fz);
   // lean: 0 facing you, 90 flat on its back. Measured against the way you
   // face, so a phone tipped past flat keeps counting instead of folding back.
   const toYou = normal.x * Math.sin(heading) + normal.z * Math.cos(heading);
-  const lean = Math.atan2(normal.y, toYou);
+  touch.lean = Math.atan2(normal.y, toYou);
+  if (!hasRest) recentre();
 
-  if (lastHeading === null) { lastHeading = heading; touch.side0 = side; touch.lean0 = lean; }
-  let d = heading - lastHeading;
-  if (d > Math.PI) d -= 2 * Math.PI;
-  if (d < -Math.PI) d += 2 * Math.PI;
-  lastHeading = heading;
-  // with the long edge pointing at the floor there is no heading to read
-  if (Math.abs(right.y) < 0.9) touch.dYaw += d;
-  touch.heading = heading; touch.side = side; touch.lean = lean;
+  // The long edge, as the resting hold sees it. Turned like a wheel, it
+  // swings up the face of the screen (y); turned about the short axis, it
+  // swings out of the face (z). Leaning forward to walk moves neither.
+  rel.copy(right).applyQuaternion(restInv.copy(rest).invert());
+  touch.wheel = Math.atan2(rel.y, rel.x);
+  touch.look = Math.atan2(-rel.z, rel.x);
+
+  // Settled in the middle, the rest follows you round if you shift in the
+  // chair, or the compass creeps: a couple of seconds to catch up.
+  const dt = lastT ? clamp((e.timeStamp - lastT) / 1000, 0, 0.2) : 0;
+  lastT = e.timeStamp;
+  if (Math.abs(touch.look) < 5 * DEG && Math.abs(touch.wheel) < 5 * DEG) {
+    const k = wrap(heading - restHeading) * Math.min(1, dt / 2);
+    rest.premultiply(turnRest.setFromAxisAngle(UP, k));
+    restHeading = wrap(restHeading + k);
+  }
   touch.ready = true;
 }
 
@@ -115,8 +121,11 @@ export function askForMotion() {
 
 /** the way you are holding it now is the way you hold it at rest */
 export function recentre() {
-  touch.side0 = touch.side;
+  rest.copy(q);
+  restHeading = heading;
   touch.lean0 = touch.lean;
+  touch.wheel = touch.look = 0;
+  hasRest = true;
 }
 
 // ---------------------------------------------------------- the fingers
@@ -191,24 +200,30 @@ export function initTouch(h) {
   document.addEventListener('gesturestart', (e) => e.preventDefault(), opt);
 }
 
-/* What the phone is asking for this frame. Turning and dragging are
-   handed over once and then cleared; the tilts are where they are.
+/* What the phone is asking for this frame. Dragging is handed over once
+   and then cleared; the tilts are held positions.
      walk, strafe   -1..1, + is forward / right
      run            tipped well past a walk
+     turn           radians to turn this frame, + is left
      steer          -1..1, + is left, the way the car's A key turns it
-     tilt           the bubble for the on-screen level, -1..1 each way */
-export function sampleTouch() {
+     tilt, wheel    the on-screen level: the bubble, and the ring's turn */
+export function sampleTouch(dt) {
   const lean = (touch.lean - touch.lean0) / DEG;
-  const side = (touch.side - touch.side0) / DEG;
+  const wheel = touch.wheel / DEG, look = touch.look / DEG;
+  const r = touch.ready;
+  // a small tilt is a slow look round, a big one a fast one
+  const L = r ? ramp(look, 6, 30) : 0;
   const out = {
-    turn: touch.dYaw, dragX: touch.dragX, dragY: touch.dragY,
-    walk: touch.ready ? ramp(lean, 7, 22) : 0,
-    strafe: touch.ready ? -ramp(side, 7, 22) : 0,
-    run: touch.ready && lean > 32,
-    steer: touch.ready ? ramp(side, 2.5, 30) : 0,
-    tilt: [clamp(-side / 30, -1, 1), clamp(-lean / 30, -1, 1)],
+    dragX: touch.dragX, dragY: touch.dragY,
+    walk: r ? ramp(lean, 7, 22) : 0,
+    strafe: r ? -ramp(wheel, 7, 24) : 0,
+    run: r && lean > 32,
+    turn: L * Math.abs(L) * 2.6 * dt,
+    steer: r ? ramp(wheel, 2.5, 30) : 0,
+    tilt: [clamp(-look / 30, -1, 1), clamp(-lean / 30, -1, 1)],
+    wheel: r ? clamp(wheel, -60, 60) : 0,
     gas: touch.gas, brake: touch.brake,
   };
-  touch.dYaw = 0; touch.dragX = 0; touch.dragY = 0;
+  touch.dragX = 0; touch.dragY = 0;
   return out;
 }

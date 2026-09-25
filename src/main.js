@@ -1558,32 +1558,33 @@ function leaveCar() {
 /* ------------------------------------------------ the phone
    What src/touch.js reads, turned into what the mouse and the keys would
    have done, so everything downstream -- the drugs on your hands, the
-   stagger, the car -- treats it exactly the same. Turning the phone and
-   dragging a finger go in where the mouse goes (and lag and overshoot
-   like it on booze and ether); the tilt goes in where the keys go. */
+   stagger, the car -- treats it exactly the same. Looking round, by tilt
+   or by finger, goes in where the mouse goes (and lags and overshoots
+   like it on booze and ether); walking goes in where the keys go. */
 const phone = { walk: 0, strafe: 0, run: false };
 let phoneDriving = false;
-const tiltDot = document.querySelector('#tilt i');
-function phoneInput() {
+const tiltEl = document.getElementById('tilt'), tiltDot = document.querySelector('#tilt i');
+function phoneInput(dt) {
   if (!touch.on) return;
-  const t = sampleTouch();
+  const t = sampleTouch(dt);
   const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
   document.documentElement.classList.toggle('driving', driving);
 
-  if (!game.over) {
+  // in the car the phone is the wheel and the thumbs are on the pedals
+  if (!game.over && !driving) {
     player.lookLag.x -= t.turn;
-    // in the car the thumbs are on the pedals, not looking about
-    if (!driving) {
-      player.lookLag.x += t.dragX * 0.005;
-      player.lookLag.y += t.dragY * 0.004;
-    }
+    player.lookLag.x += t.dragX * 0.005;
+    player.lookLag.y += t.dragY * 0.004;
   }
   // hands full of a conversation: tapping an answer is not an order to walk
   const still = !!game.dlg || driving;
   phone.walk = still ? 0 : t.walk;
   phone.strafe = still ? 0 : t.strafe;
   phone.run = !still && t.run;
-  if (tiltDot) tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
+  if (tiltDot) {
+    tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
+    tiltEl.style.transform = `rotate(${(-t.wheel).toFixed(1)}deg)`;
+  }
 
   if (driving) {
     // The wheel. The car only knows A and D, so the phone works them: held
@@ -2153,7 +2154,7 @@ function tick(dt, draw = true) {
     game.say('You get back in and turn the car around. The road runs back to the hotel.');
   }
 
-  phoneInput();
+  phoneInput(dt);
 
   // How much humanity is breathing on you right now. Upstairs there are at
   // most two people in the room and a shut door is the whole point of the
@@ -2552,7 +2553,7 @@ document.getElementById('start').addEventListener('click', () => {
     'Somewhere around the edge of the carpet the drugs began to take hold.'), 900);
   if (touch.on) setTimeout(() => game.say(touch.denied
     ? 'No motion access, so drag to look. To tilt and walk, close this tab, open the game again and tap Allow.'
-    : 'Tilt forward to walk, tip sideways to step, turn yourself to look round. Tap to act. Two fingers to level.',
+    : 'Tilt away to walk, tilt left or right to look round, turn it like a wheel to step sideways. Two fingers to level.',
   null, 7), 5600);
 });
 

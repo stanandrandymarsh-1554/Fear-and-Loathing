@@ -715,6 +715,11 @@ html.touch #tilt{
   background:radial-gradient(circle, rgba(244,233,200,.12) 0 9px, transparent 10px);
   pointer-events:none;
 }
+/* the notch on the ring turns as the screen turns like a wheel */
+html.touch #tilt::before{
+  content:''; position:absolute; left:21px; top:-5px; width:2px; height:8px;
+  background:rgba(244,233,200,.6);
+}
 html.touch #tilt i{
   position:absolute; left:17px; top:17px; width:10px; height:10px; border-radius:50%;
   background:var(--amber); box-shadow:0 0 8px var(--amber);
