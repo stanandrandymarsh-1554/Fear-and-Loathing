@@ -673,14 +673,19 @@ let focusTarget = null;
    see until you are holding enough perception. Pointing at it does not
    do it for you -- you still have to get there, and still have to be
    in a fit state to deal with whatever is waiting.  */
+// A person's position is where they stand. Marking that put the diamond on
+// the floor at their feet -- behind the counter, for the clerk -- so a
+// person is marked at the chest.
+const objChest = new THREE.Vector3();
+const chest = (g, up = 1.25) => objChest.copy(g.position).setY(g.position.y + up);
 const OBJECTIVE_AT = {
-  checkin:   () => npcs[0].group.position,
-  score:     () => npcs[1].group.position,
+  checkin:   () => chest(npcs[0].group),
+  score:     () => chest(npcs[1].group),
   briefcase: () => (briefcase.taken ? null : briefcase.pos),
-  security:  () => npcs[3].group.position,
+  security:  () => chest(npcs[3].group),
   room:      () => new THREE.Vector3(0, 1.4, 52),
-  bath:      () => gonzo.group.position,
-  maid:      () => (maidState.phase === 'here' ? maid.group.position : null),
+  bath:      () => chest(gonzo.group, 0.7),   // lying in the tub
+  maid:      () => (maidState.phase === 'here' ? chest(maid.group) : null),
   story:     () => new THREE.Vector3(SUITE_X + 4.95, 1.2, -2.8),
   downstairs: () => new THREE.Vector3(SUITE_X + SUITE.liftCall.x, 1.2, SUITE.liftCall.z),
   // the doors while you are inside, the car once you are through them
@@ -694,11 +699,11 @@ const OBJECTIVE_AT = {
   // (or, after a wreck on the way back, the lounge door to the convention)
   return:    () => (game.act === 1 ? LOUNGE_DOOR_AT
     : new THREE.Vector3(DESERT_X, 1.5, DESERT_Z - COURT.mouth - 6)),
-  badge:     () => registrar.group.position,
+  badge:     () => chest(registrar.group),
   seminar:   () => (seminar.seated ? null : new THREE.Vector3(CONV_X + CONV.seat.x, 1.0, CONV.seat.z)),
-  georgia:   () => georgiaDA.group.position,
+  georgia:   () => chest(georgiaDA.group),
   walkout:   () => new THREE.Vector3(CONV_X + CONV.exit.x, 1.6, CONV.exit.z),
-  bill:      () => npcs[0].group.position,
+  bill:      () => chest(npcs[0].group),
   // the same way out as the first time, and then the far end of the road
   westward:  () => (car.stage ? new THREE.Vector3(DESERT_X, 2.5, DESERT_Z + desert.end - 80)
     : player.pos.z > world.frontage.PAVE_Z
@@ -708,6 +713,8 @@ const OBJECTIVE_AT = {
 const objEl = document.getElementById('objective');
 const objVec = new THREE.Vector3();
 const objCam = new THREE.Vector3();   // kept separate: project() would clobber it
+const hudEl = document.getElementById('hud');
+let hudBox = null;                     // measured once, again after a resize or a turn
 
 function updateObjective() {
   // no hand-holding while you are being spoken to, or once it is over
@@ -741,17 +748,29 @@ function updateObjective() {
     sx = cam.x >= 0 ? w * 2 : -w;
     sy = h / 2;
   } else {
+    // onto the screen as the drugs have bent it, not as the camera saw it
     const ndc = objVec.copy(at).project(camera);
-    sx = (ndc.x * 0.5 + 0.5) * w;
-    sy = (-ndc.y * 0.5 + 0.5) * h;
+    const [ux, uy] = post.toScreen(ndc.x * 0.5 + 0.5, -ndc.y * 0.5 + 0.5);
+    sx = ux * w;
+    sy = uy * h;
   }
 
-  let edge = behind || sx < pad || sx > w - pad || sy < pad || sy > h - pad;
+  // The marker lives inside #hud, and on a phone #hud is pulled in clear of
+  // the notch -- so its left:0 is not the screen's. Placing it in screen
+  // pixels put it the width of the notch to one side of whatever it marked:
+  // still on a man standing next to you, nowhere near one across the floor.
+  if (!hudBox || !hudBox.width) hudBox = hudEl.getBoundingClientRect();
+  sx -= hudBox.left; sy -= hudBox.top;
+  const bw = hudBox.width || w, bh = hudBox.height || h;
+
+  let edge = behind || sx < pad || sx > bw - pad || sy < pad || sy > bh - pad;
   if (edge) {
-    const cx = w / 2, cy = h / 2;
+    // from the middle of the SCREEN, which is not the middle of #hud when
+    // the notch takes more off one side than the other
+    const cx = w / 2 - hudBox.left, cy = h / 2 - hudBox.top;
     let dx = sx - cx, dy = sy - cy;
     if (!dx && !dy) dx = 1;
-    const m = Math.max(Math.abs(dx) / (w / 2 - pad), Math.abs(dy) / (h / 2 - pad)) || 1;
+    const m = Math.max(Math.abs(dx) / (Math.min(cx, bw - cx) - pad), Math.abs(dy) / (Math.min(cy, bh - cy) - pad)) || 1;
     dx /= m; dy /= m;
     sx = cx + dx; sy = cy + dy;
     objEl.style.setProperty('--pt', String(Math.atan2(dy, dx) * 180 / Math.PI - 90));
@@ -3026,16 +3045,19 @@ function resize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   post.setSize(w, h, dpr);
+  hudBox = null;
 }
 addEventListener('resize', resize);
 resize();
 
 /* --------------------------------------------------- start */
 document.getElementById('start').addEventListener('click', () => {
-  askForMotion();
-  if (touch.on) document.getElementById('tasks').classList.add('dim');
+  // sound first: the motion-access prompt takes the speaker away while it
+  // is up, and a context made after it starts out interrupted
   audio.start();
   audio.resume();
+  askForMotion();
+  if (touch.on) document.getElementById('tasks').classList.add('dim');
   document.getElementById('title').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   started = true;
