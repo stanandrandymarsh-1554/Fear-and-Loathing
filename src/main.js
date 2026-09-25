@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { buildSuite, SUITE } from './suite.js';
-// (one line: build.rb rewrites imports line by line)
 import { buildDesert, ROAD, DRIVER_SEAT, makeCar, makeVehicle, makePatrolCar, damageCar, roadY, roadHeading, roadSlope, lateral, roadPoint, COURT, TOWN, inCourt } from './desert.js';
 import { buildConvention, CONV } from './convention.js';
 import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js';
@@ -2793,7 +2792,7 @@ function tick(dt, draw = true) {
   // A dev channel over the DOM. The page's own globals are invisible to an
   // out-of-process inspector, so state goes out through an attribute and
   // commands come back in through one. Both halves are inert until something
-  // sets data-fl-debug, and build.rb strips this block from the shipped file.
+  // sets data-fl-debug, and the Vite build (vite.config.js) strips this block.
 if (document.documentElement.hasAttribute('data-fl-debug')) {
     document.body.dataset.fl = JSON.stringify({
       psych: +s2.psych.toFixed(3), rush: +s2.rush.toFixed(3), blur: +s2.blur.toFixed(3),
