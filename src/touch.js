@@ -23,7 +23,9 @@
                no tilt, no stick, nothing to be zeroed or to drift. Which
                buttons are down is worked out afresh from every finger on
                the glass at every touch, so a lost finger cannot leave one
-               held.
+               held. You look round the way you do on foot -- turn the
+               phone, or drag a finger that came down away from the
+               buttons -- and that finger never presses one.
    ============================================================ */
 import * as THREE from 'three';
 
@@ -136,7 +138,9 @@ function onStart(e) {
   for (const t of e.changedTouches) {
     const left = t.clientX < innerWidth / 2;
     const f = { x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY,
-      t0: now, moved: false, left, target: e.target, stick: false };
+      t0: now, moved: false, left, target: e.target, stick: false,
+      // in the car: a finger that lands clear of the buttons is for looking
+      look: !!handlers.driving?.() && !nearPad(t.clientX, t.clientY, LOOK_CLEAR) };
     // the left thumb, down on the view, is the stick -- one at a time, and
     // never in the car, where the thumbs are on the buttons
     if (left && e.target.id === 'gl' && stickId === null && !handlers.driving?.()) {
@@ -155,8 +159,8 @@ function onMove(e) {
     const f = touch.fingers.get(t.identifier);
     if (!f) continue;
     if (Math.hypot(t.clientX - f.x0, t.clientY - f.y0) > TAP_PX) f.moved = true;
-    if (handlers.driving?.()) {
-      // in the car a finger is only ever on a button
+    if (handlers.driving?.() && !f.look) {
+      // a finger on the buttons is only ever on the buttons
     } else if (f.stick) {
       const dx = t.clientX - stickX, dy = t.clientY - stickY;
       const d = Math.hypot(dx, dy) / STICK_R;
@@ -205,6 +209,13 @@ function dropStick() {
    a thumb that creeps off the edge still counts. */
 const padEls = [...document.querySelectorAll('#drive [data-pad]')];
 const SLACK = 18;
+const LOOK_CLEAR = 40;   // how far from every button a finger must land to be a look
+function nearPad(x, y, m) {
+  return padEls.some((el) => {
+    const r = el.getBoundingClientRect();
+    return x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m;
+  });
+}
 function pads(list) {
   const p = touch.pads;
   p.left = p.right = p.brake = p.gas = false;
@@ -212,6 +223,7 @@ function pads(list) {
     for (const el of padEls) {
       const r = el.getBoundingClientRect();
       for (const t of list) {
+        if (touch.fingers.get(t.identifier)?.look) continue;
         if (t.clientX >= r.left - SLACK && t.clientX <= r.right + SLACK
           && t.clientY >= r.top - SLACK && t.clientY <= r.bottom + SLACK) p[el.dataset.pad] = true;
       }
@@ -223,7 +235,7 @@ function pads(list) {
 /** getting in or out: nothing held over from before, nothing carried on */
 export function resetTouch() {
   if (stickId !== null) dropStick();
-  for (const f of touch.fingers.values()) { f.stick = false; f.moved = true; }
+  for (const f of touch.fingers.values()) { f.stick = false; f.look = false; f.moved = true; }
   touch.dragX = touch.dragY = touch.yaw = touch.pitch = 0;
   pads([]);
 }
