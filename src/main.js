@@ -1687,7 +1687,9 @@ function stepCar(dt, s, opt = {}) {
   player.lookLag.x -= lx; player.lookLag.y -= ly;
   head.yaw = clamp(head.yaw - lx, -1.9, 1.9);
   head.pitch = clamp(head.pitch - ly, -0.8, 0.55);
-  head.idle = Math.abs(lx) + Math.abs(ly) > 1e-4 ? 0 : head.idle + dt;
+  // (a hand holding a phone is never quite still: under about 3 degrees a
+  // second counts as leaving the head alone, so it still comes home)
+  head.idle = Math.abs(lx) + Math.abs(ly) > (touch.on ? 0.05 * dt : 1e-4) ? 0 : head.idle + dt;
   if (head.idle > 1.6 && vAbs > 3) {
     const k = 1 - Math.exp(-dt * 1.2);
     head.yaw -= head.yaw * k; head.pitch -= head.pitch * k;
@@ -1750,8 +1752,8 @@ function phoneInput() {
   const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
   document.documentElement.classList.toggle('driving', driving);
 
-  // in the car the thumbs are on the buttons and the head is on the road
-  if (!game.over && !driving) {
+  // the head turns in the car too; it drifts back to the road when left be
+  if (!game.over) {
     player.lookLag.x -= t.yaw * GYRO;
     player.lookLag.y -= t.pitch * GYRO;
     player.lookLag.x += t.dragX * 0.005;
@@ -1767,7 +1769,7 @@ function phoneInput() {
     if (!phoneDriving) {
       resetTouch();
       game.say('Hold GAS to go and BRAKE to stop -- keep holding it to reverse. '
-        + 'The arrows steer.', null, 6);
+        + 'The arrows steer. Turn the phone, or drag above the buttons, to look round.', null, 7);
     }
     // the four buttons are the four keys, held for as long as they are held
     keys.KeyW = t.pads.gas;
