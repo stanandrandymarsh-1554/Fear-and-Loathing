@@ -660,7 +660,7 @@ canvas#gl{
    The phone (src/touch.js). Nothing here applies without html.touch,
    which is only ever set on a touch screen.
    ------------------------------------------------------------ */
-#case-btn, #tilt, #pedals, #turn-phone, .controls-touch{ display:none; }
+#case-btn, #pedals, #turn-phone, .controls-touch{ display:none; }
 html.touch .controls{ display:none; }
 html.touch .controls-touch{
   display:block; margin-top:20px;
@@ -681,8 +681,7 @@ html.touch #gl, html.touch #hud, html.touch #dialogue{ touch-action:none; }
 html.touch #hud{ left:env(safe-area-inset-left); right:env(safe-area-inset-right); }
 
 /* the things a thumb can land on */
-html.touch .dlg-options li, html.touch .vial, html.touch #tasks, html.touch #case-btn,
-html.touch #tilt, html.touch #tilt-read{
+html.touch .dlg-options li, html.touch .vial, html.touch #tasks, html.touch #case-btn{
   pointer-events:auto;
 }
 html.touch .dlg-options li{ padding-top:9px; padding-bottom:9px; }
@@ -708,41 +707,16 @@ html.touch #tasks{ width:min(280px, 34vw); padding:9px 11px 10px; }
 html.touch #tasks li{ font-size:11px; }
 html.touch #tasks.dim{ opacity:.35; transform:translateX(70%); }
 
-/* a spirit level: where the phone is, against the dead zone that stands still */
-html.touch #tilt{
-  display:block; position:fixed; left:50%; bottom:14px; z-index:5;
-  width:44px; height:44px; margin-left:-22px; border-radius:50%;
-  border:1px solid rgba(244,233,200,.28);
-  background:radial-gradient(circle, rgba(244,233,200,.12) 0 9px, transparent 10px);
+/* the floating stick: it appears where the left thumb lands */
+#stick{ display:none; }
+html.touch #stick.on{
+  display:block; position:fixed; z-index:5; pointer-events:none;
+  width:112px; height:112px; margin:-56px 0 0 -56px; border-radius:50%;
+  border:1px solid rgba(244,233,200,.3); background:rgba(8,5,3,.18);
 }
-/* which way you are going, flicked, just above the level */
-#go{ display:none; }
-html.touch #go{
-  display:block; position:fixed; left:50%; bottom:62px; z-index:5;
-  transform:translateX(-50%); pointer-events:none;
-  font:600 15px/1 var(--font-mono); letter-spacing:.1em; color:var(--amber);
-  text-shadow:0 0 8px rgba(255,180,0,.6);
-}
-html.touch body.tilt-read #go{ bottom:88px; }
-/* what the level is reading, when you tap it: bold is what it is doing */
-#tilt-read{ display:none; }
-html.touch body.tilt-read #tilt-read{
-  display:block; position:fixed; left:50%; bottom:64px; z-index:5;
-  transform:translateX(-50%); white-space:nowrap;
-  font:600 11px/1 var(--font-mono); letter-spacing:.08em;
-  padding:6px 9px; background:rgba(8,5,3,.7); color:var(--ink-dim);
-}
-html.touch body.tilt-read #tilt-read b{ color:var(--amber); }
-html.touch body.tilt-read #tilt-read span{ margin:0 4px; }
-html.touch body.tilt-read #tilt-read b{ margin:0 4px; }
-/* the notch on the ring turns as the screen turns like a wheel */
-html.touch #tilt::before{
-  content:''; position:absolute; left:21px; top:-5px; width:2px; height:8px;
-  background:rgba(244,233,200,.6);
-}
-html.touch #tilt i{
-  position:absolute; left:17px; top:17px; width:10px; height:10px; border-radius:50%;
-  background:var(--amber); box-shadow:0 0 8px var(--amber);
+html.touch #stick i{
+  position:absolute; left:34px; top:34px; width:44px; height:44px; border-radius:50%;
+  background:rgba(255,180,0,.35); border:1px solid rgba(255,180,0,.7);
 }
 
 html.touch.driving #pedals{
