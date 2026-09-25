@@ -12,7 +12,7 @@ import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js
 import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
-import { touch, initTouch, askForMotion, sampleTouch, stopMoving } from './touch.js';
+import { touch, initTouch, askForMotion, sampleTouch, centreWheel } from './touch.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -1558,53 +1558,34 @@ function leaveCar() {
 /* ------------------------------------------------ the phone
    What src/touch.js reads, turned into what the mouse and the keys would
    have done, so everything downstream -- the drugs on your hands, the
-   stagger, the car -- treats it exactly the same. Looking round, by tilt
-   or by finger, goes in where the mouse goes (and lags and overshoots
-   like it on booze and ether); walking goes in where the keys go. */
+   stagger, the car -- treats it exactly the same. The phone's turning and
+   a dragged finger go in where the mouse goes (and lag and overshoot like
+   it on booze and ether); the stick goes in where the keys go. */
+const GYRO = 1.5;          // camera degrees per degree the phone turns
 const phone = { walk: 0, strafe: 0, run: false };
 let phoneDriving = false;
-const tiltEl = document.getElementById('tilt'), tiltDot = document.querySelector('#tilt i');
-const tiltRead = document.getElementById('tilt-read'), goEl = document.getElementById('go');
-function phoneInput(dt) {
+function phoneInput() {
   if (!touch.on) return;
-  const t = sampleTouch(dt);
+  const t = sampleTouch();
   const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
   document.documentElement.classList.toggle('driving', driving);
 
   // in the car the phone is the wheel and the thumbs are on the pedals
   if (!game.over && !driving) {
-    player.lookLag.x -= t.turn;
+    player.lookLag.x -= t.yaw * GYRO;
+    player.lookLag.y -= t.pitch * GYRO;
     player.lookLag.x += t.dragX * 0.005;
     player.lookLag.y += t.dragY * 0.004;
   }
-  // A conversation, a cut to black, a chair or the car all stop you where
-  // you stand: nobody wants to come out of a fade already walking.
-  const still = !!game.dlg || driving || !!fade || !!winning || game._blacking > 0
-    || seminar.seated || game.over;
-  if (still) stopMoving();
+  // a conversation, a cut to black or a chair: the legs are not yours
+  const still = !!game.dlg || driving || !!fade || !!winning || seminar.seated || game.over;
   phone.walk = still ? 0 : t.walk;
   phone.strafe = still ? 0 : t.strafe;
   phone.run = !still && t.run;
-  if (goEl) {
-    const arrows = (t.walk > 0 ? (t.run ? '▲▲' : '▲') : t.walk < 0 ? '▼' : '')
-      + (t.strafe < 0 ? '◀' : t.strafe > 0 ? '▶' : '');
-    if (goEl.textContent !== arrows) goEl.textContent = arrows;
-  }
-  if (tiltDot) {
-    tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
-    tiltEl.style.transform = `rotate(${(-t.wheel).toFixed(1)}deg)`;
-  }
-  // tap the level for the numbers behind it, to see what is drifting
-  if (document.body.classList.contains('tilt-read')) {
-    const [lean, look, wheel] = t.raw;
-    const on = (v) => (Math.abs(v) > 0.01 ? '<b>' : '<span>');
-    const off = (v) => (Math.abs(v) > 0.01 ? '</b>' : '</span>');
-    tiltRead.innerHTML = `${on(t.walk)}WALK ${lean.toFixed(0)}°${off(t.walk)} `
-      + `${on(t.turn)}LOOK ${look.toFixed(0)}°${off(t.turn)} `
-      + `${on(t.strafe)}WHEEL ${wheel.toFixed(0)}°${off(t.strafe)}`;
-  }
 
   if (driving) {
+    // straight ahead is however you were holding it as you got in
+    if (!phoneDriving) centreWheel();
     // The wheel. The car only knows A and D, so the phone works them: held
     // while the wheel is short of where the phone is, let go once it is
     // there. The lock is stepCar's own, so a phone tipped halfway puts the
@@ -1624,6 +1605,7 @@ function phoneInput(dt) {
 }
 
 initTouch({
+  driving: () => document.documentElement.classList.contains('driving'),
   // a tap on the view is E; a tap on a thing on screen is that thing
   tap(target) {
     if (!started || game.over) return;
@@ -1633,13 +1615,11 @@ initTouch({
     if (vial) { game.take(vial.dataset.k); document.body.classList.remove('case-open'); return; }
     if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
     if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
-    if (target.closest('#tilt, #tilt-read')) { document.body.classList.toggle('tilt-read'); return; }
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
     // in the car a quick tap is a dab on a pedal
     if (game.dlg || document.documentElement.classList.contains('driving')) return;
     interact();
   },
-  recentred() { game.toast('LEVEL', 'info'); },
 });
 
 /* ------------------------------------------------ fades
@@ -2173,7 +2153,7 @@ function tick(dt, draw = true) {
     game.say('You get back in and turn the car around. The road runs back to the hotel.');
   }
 
-  phoneInput(dt);
+  phoneInput();
 
   // How much humanity is breathing on you right now. Upstairs there are at
   // most two people in the room and a shut door is the whole point of the
@@ -2571,8 +2551,8 @@ document.getElementById('start').addEventListener('click', () => {
   setTimeout(() => game.say(
     'Somewhere around the edge of the carpet the drugs began to take hold.'), 900);
   if (touch.on) setTimeout(() => game.say(touch.denied
-    ? 'No motion access, so drag to look. To tilt and walk, close this tab, open the game again and tap Allow.'
-    : 'Flick it away to walk and back once to stop. Tilt left or right to look. Flick it round like a wheel to shuffle sideways.',
+    ? 'No motion access, so drag with the right thumb to look. To look by turning the phone, close this tab, open the game again and tap Allow.'
+    : 'Left thumb to walk. Turn the phone to look round, or drag with the right thumb. Tap to act.',
   null, 7), 5600);
 });
 
