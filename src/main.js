@@ -1564,6 +1564,7 @@ function leaveCar() {
 const phone = { walk: 0, strafe: 0, run: false };
 let phoneDriving = false;
 const tiltEl = document.getElementById('tilt'), tiltDot = document.querySelector('#tilt i');
+const tiltRead = document.getElementById('tilt-read');
 function phoneInput(dt) {
   if (!touch.on) return;
   const t = sampleTouch(dt);
@@ -1584,6 +1585,15 @@ function phoneInput(dt) {
   if (tiltDot) {
     tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
     tiltEl.style.transform = `rotate(${(-t.wheel).toFixed(1)}deg)`;
+  }
+  // tap the level for the numbers behind it, to see what is drifting
+  if (document.body.classList.contains('tilt-read')) {
+    const [lean, look, wheel] = t.raw;
+    const on = (v) => (Math.abs(v) > 0.01 ? '<b>' : '<span>');
+    const off = (v) => (Math.abs(v) > 0.01 ? '</b>' : '</span>');
+    tiltRead.innerHTML = `${on(t.walk)}WALK ${lean.toFixed(0)}°${off(t.walk)} `
+      + `${on(t.turn)}LOOK ${look.toFixed(0)}°${off(t.turn)} `
+      + `${on(t.strafe)}WHEEL ${wheel.toFixed(0)}°${off(t.strafe)}`;
   }
 
   if (driving) {
@@ -1615,6 +1625,7 @@ initTouch({
     if (vial) { game.take(vial.dataset.k); document.body.classList.remove('case-open'); return; }
     if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
     if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
+    if (target.closest('#tilt, #tilt-read')) { document.body.classList.toggle('tilt-read'); return; }
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
     // in the car a quick tap is a dab on a pedal
     if (game.dlg || document.documentElement.classList.contains('driving')) return;

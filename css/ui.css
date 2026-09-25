@@ -681,7 +681,8 @@ html.touch #gl, html.touch #hud, html.touch #dialogue{ touch-action:none; }
 html.touch #hud{ left:env(safe-area-inset-left); right:env(safe-area-inset-right); }
 
 /* the things a thumb can land on */
-html.touch .dlg-options li, html.touch .vial, html.touch #tasks, html.touch #case-btn{
+html.touch .dlg-options li, html.touch .vial, html.touch #tasks, html.touch #case-btn,
+html.touch #tilt, html.touch #tilt-read{
   pointer-events:auto;
 }
 html.touch .dlg-options li{ padding-top:9px; padding-bottom:9px; }
@@ -713,8 +714,18 @@ html.touch #tilt{
   width:44px; height:44px; margin-left:-22px; border-radius:50%;
   border:1px solid rgba(244,233,200,.28);
   background:radial-gradient(circle, rgba(244,233,200,.12) 0 9px, transparent 10px);
-  pointer-events:none;
 }
+/* what the level is reading, when you tap it: bold is what it is doing */
+#tilt-read{ display:none; }
+html.touch body.tilt-read #tilt-read{
+  display:block; position:fixed; left:50%; bottom:64px; z-index:5;
+  transform:translateX(-50%); white-space:nowrap;
+  font:600 11px/1 var(--font-mono); letter-spacing:.08em;
+  padding:6px 9px; background:rgba(8,5,3,.7); color:var(--ink-dim);
+}
+html.touch body.tilt-read #tilt-read b{ color:var(--amber); }
+html.touch body.tilt-read #tilt-read span{ margin:0 4px; }
+html.touch body.tilt-read #tilt-read b{ margin:0 4px; }
 /* the notch on the ring turns as the screen turns like a wheel */
 html.touch #tilt::before{
   content:''; position:absolute; left:21px; top:-5px; width:2px; height:8px;
