@@ -453,9 +453,9 @@ const bats = new BatSwarm(scene);
 // than somewhere round the back of a turning bar.
 
 const npcs = [
-  new NPC({ id: 'clerk', name: 'SWAN', x: -18.8, z: -43, ry: Math.PI / 2, reach: 5.2,
+  new NPC({ id: 'clerk', name: 'SWAN', x: -16.85, z: -43, ry: Math.PI / 2, reach: 5.2,
             skin: 0xd8b08c, suit: 0x3c1a44, tint: 0xffb400, look: 'clerk', pose: 'counter' }),
-  new NPC({ id: 'dealer', name: 'THE MAN AT THE BAR', x: 0, z: -4.4, ry: Math.PI, reach: 5.0,
+  new NPC({ id: 'dealer', name: 'THE MAN AT THE BAR', x: 0, z: -4.95, ry: Math.PI, reach: 5.0,
             skin: 0x8a6244, suit: 0x1e2a33, tint: 0x12e2e2, look: 'bartender', pose: 'counter' }),
   // at the nautical bar, among the lizards, where the film has him
   new NPC({ id: 'attorney', name: 'YOUR ATTORNEY', x: 29.9, z: -44.6, ry: Math.PI / 2, reach: 3.8,
