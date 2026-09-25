@@ -1695,7 +1695,9 @@ function stepCar(dt, s, opt = {}) {
 
   // ---- what the chemistry does to the picture (all zero sober)
   const sf = Math.min(1, vAbs / 30);
-  const bump = (opt.rough || 0) + 0.004 * sf;          // the road itself, sober or not
+  // the road itself, sober or not -- and the gravel only while you are
+  // rolling over it: a parked car does not rumble
+  const bump = ((opt.rough || 0) + 0.004) * sf;
   const swayYaw = Math.sin(clock * 0.43) * 0.10 * s.blur + Math.sin(clock * 0.21) * 0.07 * lost
     + Math.sin(clock * 0.17 + 2) * 0.05 * s.psych;
   const swayPitch = Math.sin(clock * 0.53) * 0.035 * s.blur;
@@ -1897,9 +1899,11 @@ function endMint() {
      the town street   the parking lane is road; the sidewalk is a kerb you
                        bounce up; the storefronts, the lamp posts and the
                        parked cars are things you hit
-     the open road     the shoulder slows you, the scrub ends you
+     the open road     the shoulder and the scrub slow you down; driving
+                       out into the desert proper (25m off) is a wreck
    Returns true if the drive is over. */
 const prevPos = new THREE.Vector3();
+const OFFROAD_FEAR = 0.3;      // the most the dirt alone will ever frighten you
 function roadRules(dt, dir) {
   const x = car.pos.x - DESERT_X, s = -(car.pos.z - DESERT_Z);
   const lx = latOf(car.pos.x, car.pos.z);
@@ -1957,15 +1961,17 @@ function roadRules(dt, dir) {
   }
 
   if (off > 0) {
-    // a car sitting still on a kerb is a parked car, not a wreck: it is
-    // the speed you carry into the scrub that finishes you
-    car.offRoad += dt * (hard ? 2.2 : 0.8) * Math.min(1, Math.abs(car.speed) / 8);
-    game.fear = clamp(game.fear + dt * 0.22, 0, 1);
+    // Off the tarmac is not a wreck. The dirt slows you down and makes you
+    // a little nervous while you are moving on it, and that is all: a
+    // little, and only up to a point, and not at all once you have stopped
+    // -- pulling onto the shoulder for the highway patrol is pulling over,
+    // not a crime. It used to climb a fifth of the bar a second, standing
+    // still or not, and end the drive after a few seconds of gravel. What
+    // ends a drive now is hitting something.
+    const moving = Math.min(1, Math.abs(car.speed) / 10);
+    if (game.fear < OFFROAD_FEAR) game.fear = Math.min(OFFROAD_FEAR, game.fear + dt * 0.03 * moving);
     car.speed *= 1 - dt * (hard ? 1.1 : 0.35);
-  } else {
-    car.offRoad = Math.max(0, car.offRoad - dt * 1.4);
   }
-  if (car.offRoad > 5.5) { game.crash(); return true; }
   return false;
 }
 
