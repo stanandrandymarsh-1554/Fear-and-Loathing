@@ -4,13 +4,13 @@
    Only ever switched on for a touch screen (or ?touch in the URL, for
    testing); a keyboard and a mouse never see any of this.
 
-     on foot   Tilt the top of the phone away from you to walk, towards
-               you to back up. Tilt it left or right to look round that
+     on foot   Flick the top of the phone away from you to set off
+               walking, and towards you once to stop (or, standing, to
+               back up). Tilt it left or right to look round that
                way: the end that goes away from you, and down, is the way
-               you turn. Turn the screen like a wheel -- anticlockwise, or
-               clockwise -- to step sideways. Every one of them is a
-               held position, not a flick: hold it there and it keeps
-               going, bring it back to the middle and it stops.
+               you turn, for as long as you hold it there. Flick the
+               screen round like a wheel -- anticlockwise, or clockwise
+               -- to start shuffling sideways, and back once to stop.
                Drag a finger to look about, and up and down.
                Tap to do whatever the prompt says. Two fingers re-level.
      driving   Turn the screen like the wheel it is. The right thumb is
@@ -107,6 +107,14 @@ function onOrientation(e) {
     rest.premultiply(turnRest.setFromAxisAngle(UP, k));
     restHeading = wrap(restHeading + k);
   }
+  // and the same for how far back you hold it, so a flick is always
+  // measured from where your hands have settled, not where they started
+  const dl = touch.lean - touch.lean0;
+  if (Math.abs(dl) < 5 * DEG) {
+    const k = dl * Math.min(1, dt / 3);
+    touch.lean0 += k;
+    rest.multiply(leanBy.setFromAxisAngle(X, -k));
+  }
   touch.ready = true;
 }
 
@@ -126,6 +134,7 @@ export function askForMotion() {
 
 /** the way you are holding it now is the way you hold it at rest */
 export function recentre() {
+  stopMoving();
   rest.copy(q);
   restHeading = heading;
   touch.lean0 = touch.lean;
@@ -205,20 +214,45 @@ export function initTouch(h) {
   document.addEventListener('gesturestart', (e) => e.preventDefault(), opt);
 }
 
+/* WALKING AND SHUFFLING ARE FLICKS, not holds. Tilt the phone away and
+   back and you set off, and keep going with the phone at rest in your
+   hands; flick it the other way once and you stop. From a standstill that
+   same flick the other way backs you up. Flick again the way you are
+   already going and you break into a run. The wheel works the same for
+   shuffling sideways: a quick turn anticlockwise and you shuffle left
+   until you turn it back clockwise once.
+   A flick counts when the tilt passes ON, and then not again until it has
+   come back inside OFF -- and for a moment after one, the snap back
+   through the middle is not counted as a flick the other way. */
+const W_ON = 12, W_OFF = 6;           // degrees of lean
+const S_ON = 14, S_OFF = 7;           // degrees of wheel
+const SETTLE = 0.45;                  // seconds a flick's rebound is ignored
+const go = { walk: 0, strafe: 0, run: false, armW: true, armS: true, coolW: 0, coolS: 0 };
+
+/** stand still: a conversation, a cut to black, the car, a re-level */
+export function stopMoving() {
+  go.walk = 0; go.strafe = 0; go.run = false;
+}
+
+/** one flick of d (+1 or -1) on an axis already going state; returns the new state */
+function flick(state, d, isWalk) {
+  if (state === -d) { if (isWalk) go.run = false; return 0; }   // the other way: stop
+  if (state === d) { if (isWalk) go.run = !go.run; return d; }  // again: run, or stop running
+  return d;                                                     // from standing: go
+}
+
 /* What the phone is asking for this frame. Dragging is handed over once
-   and then cleared; the tilts are held positions.
-     walk, strafe   -1..1, + is forward / right
-     run            tipped well past a walk
-     turn           radians to turn this frame, + is left
+   and then cleared.
+     walk, strafe   -1, 0 or 1, + is forward / right, as flicked
+     run            flicked twice
+     turn           radians to turn this frame, + is left; a held tilt
      steer          -1..1, + is left, the way the car's A key turns it
      tilt, wheel    the on-screen level: the bubble, and the ring's turn
      raw            degrees, for the readout: lean, look (+ right), wheel
 
    HANDS ARE NOT GIMBALS. Tilting a phone to look round rolls it a few
-   degrees like a wheel as well, and leaning it forward to walk does too,
-   and that was stepping you sideways the whole time. So each motion's
-   dead zone widens while another one is plainly in use: a deliberate
-   wheel-turn still strafes, a wobble on the way past does not. */
+   degrees like a wheel as well, so the wheel needs a firmer turn while
+   you are plainly looking round. */
 export function sampleTouch(dt) {
   const lean = (touch.lean - touch.lean0) / DEG;
   const wheel = touch.wheel / DEG;
@@ -227,14 +261,30 @@ export function sampleTouch(dt) {
   const lookRight = touch.look / DEG;
   const r = touch.ready;
   const deadLook = 8 + 0.5 * Math.abs(wheel);
-  const deadWheel = 10 + 0.6 * Math.abs(lookRight) + 0.3 * Math.abs(lean);
   // a small tilt is a slow look round, a big one a fast one
   const L = r ? ramp(lookRight, deadLook, deadLook + 24) : 0;
+
+  go.coolW = Math.max(0, go.coolW - dt);
+  go.coolS = Math.max(0, go.coolS - dt);
+  if (r) {
+    if (go.armW && go.coolW === 0 && Math.abs(lean) > W_ON) {
+      go.walk = flick(go.walk, Math.sign(lean), true);
+      go.armW = false; go.coolW = SETTLE;
+    } else if (!go.armW && Math.abs(lean) < W_OFF) go.armW = true;
+
+    const sOn = S_ON + 0.6 * Math.abs(lookRight);
+    if (go.armS && go.coolS === 0 && Math.abs(wheel) > sOn) {
+      // anticlockwise is + on the wheel, and that is a shuffle to the left
+      go.strafe = flick(go.strafe, -Math.sign(wheel), false);
+      go.armS = false; go.coolS = SETTLE;
+    } else if (!go.armS && Math.abs(wheel) < S_OFF) go.armS = true;
+  }
+
   const out = {
     dragX: touch.dragX, dragY: touch.dragY,
-    walk: r ? ramp(lean, 8, 23) : 0,
-    strafe: r ? -ramp(wheel, deadWheel, deadWheel + 16) : 0,
-    run: r && lean > 33,
+    walk: go.walk,
+    strafe: go.strafe,
+    run: go.run && go.walk !== 0,
     turn: -L * Math.abs(L) * 2.4 * dt,
     steer: r ? ramp(wheel, 2.5, 30) : 0,
     tilt: [clamp(lookRight / 32, -1, 1), clamp(-lean / 30, -1, 1)],
