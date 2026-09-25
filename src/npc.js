@@ -821,9 +821,13 @@ export class Pickup {
     g.position.set(x, 0, z);
     this.pos = new THREE.Vector3(x, 0.6, z);
 
-    const glass = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, roughness: 0.05, metalness: 0,
-      transmission: 0.85, transparent: true, opacity: 0.55, ior: 1.4,
+    // Plain see-through glass. It was a physical material with
+    // transmission, and one transmissive thing in view makes three draw
+    // every opaque object in the building a second time, to have something
+    // to refract -- the whole casino, twice a frame, for a 25cm vial.
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.05, metalness: 0.1,
+      transparent: true, opacity: 0.35, depthWrite: false,
     });
     const vial = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.42, 12), glass);
     vial.position.y = 0.62; g.add(vial);

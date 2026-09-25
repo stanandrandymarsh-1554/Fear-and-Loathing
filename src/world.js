@@ -20,8 +20,9 @@
    SCALE. Real big top is ~90 m across; this rotunda is 72 m
    (R = 36), which keeps the proportions and the sightlines while
    staying walkable. Everything else is sized off a 1.78 m person:
-   slot machines 1.5 m wide, bar top at 1.4 m, rail at 1.0 m,
-   aisles 3 m, dome springing at 6 m and apex at 22 m.
+   slot machines 0.44 m wide and 1.72 m to the top of the sign, bar
+   top at 1.1 m, the front desk at 1.07 m, stools at 0.78 m, rail at
+   1.0 m, dome springing at 6 m and apex at 22 m.
    ============================================================ */
 
 import * as THREE from 'three';
@@ -403,17 +404,6 @@ function textBanner(text, bg, fg, w = 1024, h = 128) {
 function buildLobbyDressing(scene, box, mat, spots, LOB_X, LOB_Z1) {
   spots.fixed = spots.fixed || [];
 
-  // ---- more than one window: the desk is eighteen metres long
-  [[-49, 'CASHIER', '#12e2e2'], [-37, 'INFORMATION', '#b6ff2e']].forEach(([z, label, col]) => {
-    spots.fixed.push({ kind: 'stand', x: -18.8, z, ry: Math.PI / 2 });      // a clerk
-    spots.fixed.push({ kind: 'stand', x: -15.0, z, ry: -Math.PI / 2 });     // being served
-    const sg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8),
-      new THREE.MeshBasicMaterial({ map: neonTexture(label, col), transparent: true,
-        blending: THREE.AdditiveBlending, depthWrite: false }));
-    sg.position.set(-18.9, 3.5, z);
-    sg.rotation.y = Math.PI / 2;
-    scene.add(sg);
-  });
   // ...and a line behind the window you want. You are at the front of it.
   spots.fixed.push({ kind: 'stand', x: -14.3, z: -45.9, ry: 0.15 },
                    { kind: 'stand', x: -14.1, z: -47.1, ry: 0.05 },
@@ -524,6 +514,185 @@ function buildLobbyDressing(scene, box, mat, spots, LOB_X, LOB_Z1) {
     welcome.rotation.y = ry;
     scene.add(welcome);
   });
+}
+
+/* ============================================================
+   THE FRONT DESK. It was a slab 2.6 metres deep and chest high with a
+   wall of pigeonholes five metres tall behind it, each hole the size of a
+   man's body -- so the clerks were heads on a counter the size of a
+   lorry, and everybody in the lobby looked like ants. A hotel desk is
+   built to a person: a counter you can lean on at 1.07 m, 0.75 m deep so
+   the clerk can reach your card, and a key rack at arm's height behind.
+
+   Three windows along its eighteen metres -- CASHIER, REGISTRATION,
+   INFORMATION -- split by brass-and-smoked-glass partitions, each with
+   its bell and its pen, and at registration the register and the bowl
+   of snacks that, in the film, is full of worms by the time Duke looks
+   into it again. Behind: walnut to three metres, a key rack for each
+   window, and the clocks that tell a guest it is later somewhere else.
+   ============================================================ */
+const DESK = { front: -15.7, depth: 0.75, top: 1.07, z0: -52, z1: -34, back: -19.45 };
+const WINDOWS = [[-49, 'CASHIER', '#12e2e2'], [-43, null, null], [-37, 'INFORMATION', '#b6ff2e']];
+
+function buildFrontDesk(scene, box, mat, spots) {
+  spots.fixed = spots.fixed || [];
+  const len = DESK.z1 - DESK.z0, zc = (DESK.z0 + DESK.z1) / 2;
+  const add = (geo, m, x, y, z, ry = 0) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z); o.rotation.y = ry;
+    scene.add(o);
+    return o;
+  };
+  const brass = mat({ color: 0xc9a048, roughness: 0.28, metalness: 0.9 });
+  const walnut = mat({ color: 0x3a1e10, roughness: 0.5, metalness: 0.15 });
+
+  // ---- the counter: walnut panels between gilt pilasters, a black kick
+  const front = canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#2a140a'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2; i++) {
+      const x = i * 256;
+      const gr = g.createLinearGradient(x, 0, x + 256, 0);
+      gr.addColorStop(0, '#4a2412'); gr.addColorStop(0.5, '#6a3a1c'); gr.addColorStop(1, '#4a2412');
+      g.fillStyle = gr; g.fillRect(x + 22, 14, 212, h - 34);
+      g.strokeStyle = '#1a0a04'; g.lineWidth = 4; g.strokeRect(x + 30, 22, 196, h - 50);
+      g.fillStyle = '#c9a048'; g.fillRect(x, 0, 12, h - 12);          // the pilaster
+      g.fillStyle = '#8a6a28'; g.fillRect(x + 3, 0, 3, h - 12);
+    }
+    g.fillStyle = '#c9a048'; g.fillRect(0, 0, w, 5);                  // the rail under the top
+    g.fillStyle = '#0a0604'; g.fillRect(0, h - 12, w, 12);            // the kick
+  }, [len / 3, 1]);
+  add(new THREE.BoxGeometry(DESK.depth, DESK.top - 0.05, len), walnut,
+    DESK.front - DESK.depth / 2, (DESK.top - 0.05) / 2, zc);
+  // solid from the counter front back to the lobby wall. If the collider
+  // is allowed to overhang the wall instead, the push-out shoves you
+  // out of bounds and the containment clamp drops you behind the desk.
+  box(-17.6, zc, 1.9, len / 2);
+  add(new THREE.PlaneGeometry(len, DESK.top - 0.05),
+    new THREE.MeshStandardMaterial({ map: front, roughness: 0.55, metalness: 0.1 }),
+    DESK.front + 0.005, (DESK.top - 0.05) / 2, zc, Math.PI / 2);
+
+  // the top: black marble with pale veins, overhanging the front on a brass
+  // nosing. (Cream marble under the lobby's amber light was one flat glare.)
+  const marble = canvasTex(256, 64, (g, w, h) => {
+    g.fillStyle = '#1e1a18'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(200,180,150,0.32)'; g.lineWidth = 1.2;
+    let s = 11;
+    const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 14; i++) {
+      g.beginPath(); let x = r() * w, y = r() * h; g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) { x += 10 + r() * 30; y += (r() - 0.5) * 22; g.lineTo(x, y); }
+      g.stroke();
+    }
+  }, [len / 2, 1]);
+  add(new THREE.BoxGeometry(DESK.depth + 0.2, 0.05, len + 0.2),
+    new THREE.MeshStandardMaterial({ map: marble, roughness: 0.3, metalness: 0.1 }),
+    DESK.front - DESK.depth / 2 + 0.08, DESK.top - 0.025, zc);
+  add(new THREE.BoxGeometry(0.04, 0.06, len + 0.2), brass, DESK.front + 0.18, DESK.top - 0.03, zc);
+  // the clerks' side: a shelf under the counter, where the cards live
+  add(new THREE.BoxGeometry(0.45, 0.04, len), walnut, DESK.front - DESK.depth - 0.2, 0.86, zc);
+
+  // ---- the windows
+  const glass = new THREE.MeshStandardMaterial({ color: 0x3a3228, roughness: 0.1, metalness: 0.3,
+    transparent: true, opacity: 0.45, depthWrite: false });
+  const bellGeo = new THREE.SphereGeometry(0.055, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+  const bellBase = new THREE.CylinderGeometry(0.06, 0.065, 0.02, 12);
+  const cardMat = mat({ color: 0xf0e8d8, roughness: 0.8 });
+  const inkMat = mat({ color: 0x14100c, roughness: 0.4, metalness: 0.4 });
+  const y0 = DESK.top;
+  const xm = DESK.front - 0.2;          // the middle of the counter top, guest side
+  WINDOWS.forEach(([z, label, col], i) => {
+    // a clerk, and somebody being served at the two you are not queueing for
+    spots.fixed.push({ kind: 'stand', x: DESK.front - DESK.depth - 0.4, z: z + (label ? 0 : 1.6), ry: Math.PI / 2 });
+    if (label) spots.fixed.push({ kind: 'stand', x: DESK.front + 0.55, z, ry: -Math.PI / 2 });
+    // the bell, the pen on its stand, a stack of cards
+    add(bellBase, brass, xm, y0 + 0.01, z - 0.55);
+    add(bellGeo, brass, xm, y0 + 0.02, z - 0.55);
+    add(new THREE.BoxGeometry(0.1, 0.02, 0.08), inkMat, xm - 0.05, y0 + 0.01, z + 0.5);
+    add(new THREE.CylinderGeometry(0.006, 0.006, 0.16, 5), inkMat, xm - 0.05, y0 + 0.09, z + 0.5).rotation.z = 0.5;
+    add(new THREE.BoxGeometry(0.16, 0.02, 0.11), cardMat, xm - 0.02, y0 + 0.01, z + 0.25);
+    // partitions between the windows
+    if (i > 0) {
+      const pz = z - 3;
+      add(new THREE.BoxGeometry(0.6, 0.5, 0.02), glass, xm - 0.08, y0 + 0.27, pz);
+      [-0.38, 0.22].forEach((dx) => add(new THREE.CylinderGeometry(0.018, 0.018, 0.56, 6), brass, xm + dx, y0 + 0.28, pz));
+      add(new THREE.BoxGeometry(0.64, 0.025, 0.035), brass, xm - 0.08, y0 + 0.55, pz);
+    }
+    // the sign over each window that is not the main one
+    if (label) {
+      add(new THREE.PlaneGeometry(2.6, 0.65),
+        new THREE.MeshBasicMaterial({ map: neonTexture(label, col), transparent: true,
+          blending: THREE.AdditiveBlending, depthWrite: false }), DESK.back + 0.1, 2.95, z, Math.PI / 2);
+    }
+  });
+  // registration: the book, open, and the bowl of snacks
+  {
+    const z = -43;
+    add(new THREE.BoxGeometry(0.34, 0.03, 0.46), mat({ color: 0x4a1010, roughness: 0.7 }), xm - 0.05, y0 + 0.015, z);
+    add(new THREE.BoxGeometry(0.3, 0.012, 0.42), cardMat, xm - 0.05, y0 + 0.036, z);
+    const bowl = add(new THREE.SphereGeometry(0.12, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+      mat({ color: 0xc8c0b0, roughness: 0.2, metalness: 0.6, side: THREE.DoubleSide }), xm + 0.05, y0 + 0.11, z - 1.0);
+    bowl.scale.y = 0.7;
+    const nutGeo = new THREE.SphereGeometry(0.016, 5, 4);
+    const nutMat = mat({ color: 0x9a6a30, roughness: 0.8 });
+    for (let k = 0; k < 14; k++) {
+      const a = k * 2.4, r = 0.02 + (k % 5) * 0.017;
+      add(nutGeo, nutMat, xm + 0.05 + Math.cos(a) * r, y0 + 0.06 + (k % 3) * 0.008, z - 1.0 + Math.sin(a) * r);
+    }
+  }
+
+  // ---- the wall behind: walnut wainscot to three metres, a gilt cornice
+  add(new THREE.BoxGeometry(0.08, 3.0, len + 0.6), mat({ color: 0x2a140a, roughness: 0.55, metalness: 0.1 }),
+    DESK.back, 1.5, zc);
+  add(new THREE.BoxGeometry(0.12, 0.08, len + 0.6), brass, DESK.back + 0.02, 3.02, zc);
+  add(new THREE.BoxGeometry(0.1, 0.12, len + 0.6), mat({ color: 0x0a0604, roughness: 0.6 }), DESK.back + 0.02, 0.06, zc);
+
+  // a key rack behind each window: pigeonholes a hand wide, keys on tags
+  const rack = canvasTex(256, 128, (g, w, h) => {
+    g.fillStyle = '#3a1c0c'; g.fillRect(0, 0, w, h);
+    const cols = 14, rows = 7, cw = (w - 12) / cols, ch = (h - 12) / rows;
+    let s = 5;
+    const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let c = 0; c < cols; c++) for (let rI = 0; rI < rows; rI++) {
+      const x = 6 + c * cw, y = 6 + rI * ch;
+      g.fillStyle = '#0e0604'; g.fillRect(x + 1.5, y + 1.5, cw - 3, ch - 3);
+      const k = r();
+      if (k < 0.55) {                          // a key on its brass tag
+        g.fillStyle = '#c9a048'; g.fillRect(x + cw * 0.38, y + ch * 0.25, cw * 0.24, ch * 0.55);
+      } else if (k < 0.72) {                   // a message waiting
+        g.fillStyle = '#e8e0cc'; g.fillRect(x + 3, y + ch * 0.35, cw - 6, ch * 0.45);
+      }
+    }
+  });
+  const rackFace = new THREE.MeshStandardMaterial({ map: rack, roughness: 0.6 });
+  WINDOWS.forEach(([z]) => {
+    add(new THREE.BoxGeometry(0.28, 1.3, 2.4), walnut, DESK.back + 0.18, 1.85, z);
+    add(new THREE.PlaneGeometry(2.3, 1.2), rackFace, DESK.back + 0.325, 1.85, z, Math.PI / 2);
+  });
+
+  // clocks for the places it is not three in the morning
+  const clocks = canvasTex(512, 96, (g, w, h) => {
+    const names = ['LAS VEGAS', 'NEW YORK', 'LONDON', 'TOKYO'];
+    const times = [[3, 10], [6, 10], [11, 10], [8, 10]];
+    names.forEach((n, i) => {
+      const cx = 64 + i * 128, cy = 38;
+      g.fillStyle = '#c9a048'; g.beginPath(); g.arc(cx, cy, 34, 0, 7); g.fill();
+      g.fillStyle = '#f2ead8'; g.beginPath(); g.arc(cx, cy, 30, 0, 7); g.fill();
+      g.strokeStyle = '#1a1008'; g.lineWidth = 2;
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        g.beginPath(); g.moveTo(cx + Math.sin(a) * 25, cy - Math.cos(a) * 25);
+        g.lineTo(cx + Math.sin(a) * 29, cy - Math.cos(a) * 29); g.stroke();
+      }
+      const [hh, mm] = times[i];
+      const ha = ((hh % 12) + mm / 60) / 12 * Math.PI * 2, ma = mm / 60 * Math.PI * 2;
+      g.lineWidth = 3.5; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(ha) * 15, cy - Math.cos(ha) * 15); g.stroke();
+      g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(ma) * 23, cy - Math.cos(ma) * 23); g.stroke();
+      g.fillStyle = '#d8b060'; g.font = 'bold 13px Georgia, serif'; g.textAlign = 'center';
+      g.fillText(n, cx, 90);
+    });
+  });
+  add(new THREE.PlaneGeometry(4.0, 0.75), new THREE.MeshBasicMaterial({ map: clocks, transparent: true }),
+    DESK.back + 0.06, 2.95, -43, Math.PI / 2);
 }
 
 /* ============================================================
@@ -1190,68 +1359,83 @@ function bigTopTexture() {
   return tex;
 }
 
-function slotScreenTexture() {
+/* The whole front of a 1970 upright, drawn to one canvas: the reel
+   window with three cream reels of fruit behind it and the payline across,
+   the pay table on black glass, the painted belly glass with the machine's
+   name, and the coin tray. Eight of these are shared round the floor, and
+   rollScreen() spins the reels on whichever one somebody pulls. */
+const SLOT_NAMES = ['BIG TOP', 'HIGH WIRE', 'RINGMASTER', 'LION TAMER', 'JACKPOT', 'TRIPLE BAR', 'GOLD RUSH', 'CLOWN MONEY'];
+const SLOT_COLS = ['#c8141e', '#1a6ac8', '#c89014', '#6a1ac8', '#c81a78', '#14a078', '#c86414', '#2a2ac8'];
+function slotScreenTexture(i = 0) {
   const cv = document.createElement('canvas');
-  cv.width = 128; cv.height = 128;
+  cv.width = 128; cv.height = 192;
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.NearestFilter;
+  tex.anisotropy = 4;
+  tex.userData.design = i % SLOT_NAMES.length;
   return tex;
 }
 
 function rollScreen(tex) {
   const g = tex.image.getContext('2d');
+  const d = tex.userData.design || 0, col = SLOT_COLS[d];
+  // chrome all round
+  const chrome = g.createLinearGradient(0, 0, 128, 0);
+  chrome.addColorStop(0, '#6a6a70'); chrome.addColorStop(0.5, '#e8e8ee'); chrome.addColorStop(1, '#6a6a70');
+  g.fillStyle = chrome; g.fillRect(0, 0, 128, 192);
 
-  // A slot machine front is three REELS behind a window, with a payline
-  // across the middle and a button deck under it -- not a grid of dots.
-  g.fillStyle = '#120a08'; g.fillRect(0, 0, 128, 128);
-
-  // the glass
-  g.fillStyle = '#040202'; g.fillRect(6, 10, 116, 74);
-
-  const SYM = [
-    ['#ff2d1f', 'bar'], ['#ffb400', 'seven'], ['#12e2e2', 'bell'],
-    ['#b6ff2e', 'bar'], ['#a03cff', 'seven'], ['#f2f2f2', 'bell'],
-  ];
+  // the reel window
+  g.fillStyle = '#0a0606'; g.fillRect(8, 8, 112, 62);
+  const SYM = ['cherry', 'bell', 'bar', 'plum', 'orange', 'seven', 'lemon'];
   for (let r = 0; r < 3; r++) {
-    const rx = 9 + r * 38.5;
-    // the reel itself, lit from behind, with its own shading
-    const grad = g.createLinearGradient(0, 10, 0, 84);
-    grad.addColorStop(0, '#1a1210'); grad.addColorStop(0.5, '#2e211c');
-    grad.addColorStop(1, '#1a1210');
-    g.fillStyle = grad; g.fillRect(rx, 10, 35, 74);
-
-    // three symbols visible per reel, the middle one on the payline
+    const rx = 12 + r * 36;
+    const grad = g.createLinearGradient(0, 10, 0, 68);
+    grad.addColorStop(0, '#8a8274'); grad.addColorStop(0.5, '#f4eedc'); grad.addColorStop(1, '#8a8274');
+    g.fillStyle = grad; g.fillRect(rx, 11, 32, 56);
     for (let k = 0; k < 3; k++) {
-      const [col, kind] = SYM[(Math.random() * SYM.length) | 0];
-      const cy = 22 + k * 25;
-      g.fillStyle = col;
-      if (kind === 'seven') {
-        g.beginPath(); g.moveTo(rx + 10, cy - 8); g.lineTo(rx + 25, cy - 8);
-        g.lineTo(rx + 16, cy + 9); g.lineTo(rx + 11, cy + 9); g.closePath(); g.fill();
+      const kind = SYM[(Math.random() * SYM.length) | 0];
+      const cx = rx + 16, cy = 20 + k * 19;
+      if (kind === 'cherry') {
+        g.strokeStyle = '#2a6a1a'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx - 4, cy + 2); g.lineTo(cx + 2, cy - 7); g.lineTo(cx + 5, cy + 2); g.stroke();
+        g.fillStyle = '#c8101a'; g.beginPath(); g.arc(cx - 4, cy + 3, 4, 0, 7); g.arc(cx + 5, cy + 3, 4, 0, 7); g.fill();
+      } else if (kind === 'bell') {
+        g.fillStyle = '#d8a018'; g.beginPath(); g.moveTo(cx - 7, cy + 5); g.quadraticCurveTo(cx - 6, cy - 8, cx, cy - 8);
+        g.quadraticCurveTo(cx + 6, cy - 8, cx + 7, cy + 5); g.fill();
       } else if (kind === 'bar') {
-        g.fillRect(rx + 7, cy - 5, 21, 10);
-        g.fillStyle = '#0a0606'; g.fillRect(rx + 7, cy - 1, 21, 2);
+        g.fillStyle = '#141010'; g.fillRect(cx - 11, cy - 5, 22, 10);
+        g.fillStyle = '#f4eedc'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.fillText('BAR', cx, cy + 3);
+      } else if (kind === 'plum') {
+        g.fillStyle = '#5a1a7a'; g.beginPath(); g.ellipse(cx, cy, 6, 7, 0, 0, 7); g.fill();
+      } else if (kind === 'orange') {
+        g.fillStyle = '#e87814'; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill();
+      } else if (kind === 'lemon') {
+        g.fillStyle = '#e8d828'; g.beginPath(); g.ellipse(cx, cy, 8, 5.5, 0, 0, 7); g.fill();
       } else {
-        g.beginPath(); g.arc(rx + 17, cy, 8, 0, 7); g.fill();
+        g.fillStyle = '#c8101a'; g.font = 'bold 17px Georgia, serif'; g.textAlign = 'center'; g.fillText('7', cx, cy + 6);
       }
     }
-    // the divider between reels
-    g.fillStyle = '#0a0606'; g.fillRect(rx + 35, 10, 3.5, 74);
   }
+  g.strokeStyle = '#e8101a'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(8, 39); g.lineTo(120, 39); g.stroke();
 
-  // the payline
-  g.strokeStyle = '#ff2d1f'; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(6, 47); g.lineTo(122, 47); g.stroke();
+  // the pay table
+  g.fillStyle = '#0c0808'; g.fillRect(10, 76, 108, 40);
+  g.fillStyle = '#e8c860'; g.font = 'bold 8px sans-serif'; g.textAlign = 'left';
+  [['7  7  7', '200'], ['BAR BAR BAR', '50'], ['BELL BELL BELL', '18'], ['CHERRY', '2']].forEach(([a, b], k) => {
+    g.fillText(a, 14, 86 + k * 9); g.textAlign = 'right'; g.fillText(b, 114, 86 + k * 9); g.textAlign = 'left';
+  });
 
-  // the button deck
-  g.fillStyle = '#241713'; g.fillRect(0, 88, 128, 40);
-  const btn = ['#ffb400', '#b6ff2e', '#ff2d1f', '#12e2e2'];
-  for (let i = 0; i < 4; i++) {
-    g.fillStyle = btn[i];
-    g.fillRect(9 + i * 29, 98, 21, 11);
-  }
-  g.fillStyle = '#e8d8a0'; g.fillRect(9, 116, 110, 5);   // the credit meter
+  // the belly glass, with the machine's name on it
+  g.fillStyle = col; g.fillRect(8, 122, 112, 44);
+  g.fillStyle = 'rgba(255,255,255,0.18)';
+  for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(8 + k * 24, 122); g.lineTo(20 + k * 24, 122); g.lineTo(8 + k * 24 - 10, 166); g.lineTo(8 + k * 24 - 22, 166); g.fill(); }
+  g.fillStyle = '#fff4d8'; g.textAlign = 'center'; g.font = 'bold 15px Georgia, serif';
+  g.fillText(SLOT_NAMES[d], 64, 149);
+  g.strokeStyle = '#f0d070'; g.lineWidth = 2; g.strokeRect(10, 124, 108, 40);
+
+  // the coin tray
+  g.fillStyle = '#1a1414'; g.fillRect(24, 172, 80, 16);
+  g.fillStyle = '#c8a048'; g.fillRect(30, 180, 3, 3); g.fillRect(40, 182, 3, 3);
 
   tex.needsUpdate = true;
 }
@@ -1270,6 +1454,80 @@ const sharedMat = (o) => {
   if (!m) { m = new THREE.MeshStandardMaterial(o); matCache.set(key, m); }
   return m;
 };
+
+/* A bar stool: chrome pedestal, foot ring, red vinyl seat, its top at
+   0.78 m where the crowd's seated hips are. The old one was a drum. */
+const STOOL = {};
+function addStool(parent, x, z) {
+  if (!STOOL.chrome) {
+    STOOL.chrome = sharedMat({ color: 0xb8b8c0, roughness: 0.2, metalness: 0.95 });
+    STOOL.vinyl = sharedMat({ color: 0x8a1018, roughness: 0.45, metalness: 0.05 });
+    // hundreds of these on the floor: kept to as few faces as still look round
+    STOOL.base = new THREE.CylinderGeometry(0.19, 0.22, 0.03, 8, 1, true);
+    STOOL.post = new THREE.CylinderGeometry(0.035, 0.035, 0.66, 5, 1, true);
+    STOOL.ring = new THREE.TorusGeometry(0.16, 0.012, 3, 7);
+    STOOL.seat = new THREE.CylinderGeometry(0.21, 0.19, 0.1, 12);
+  }
+  const put = (geo, m, y, flat) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    if (flat) o.rotation.x = Math.PI / 2;
+    parent.add(o);
+  };
+  put(STOOL.base, STOOL.chrome, 0.015);
+  put(STOOL.post, STOOL.chrome, 0.36);
+  put(STOOL.ring, STOOL.chrome, 0.3, true);
+  put(STOOL.seat, STOOL.vinyl, 0.73);
+}
+
+/* A carousel horse, mid-leap, as ONE geometry with its colours in the
+   vertices -- white body, gilt mane and tail, a red saddle -- so the whole
+   herd is a single draw that can bob up and down on its poles. Faces +Z,
+   and the pole runs through the saddle at the origin. */
+function horseGeometry() {
+  const parts = [];
+  const WHITE = 0xf2eadc, GILT = 0xd0a040, RED = 0x9a1420, DARK = 0x1a1210;
+  const part = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
+    parts.push({ geo: geo.index ? geo.toNonIndexed() : geo, m, color: new THREE.Color(color) });
+  };
+  part(new THREE.CapsuleGeometry(0.17, 0.55, 2, 8), WHITE, 0, 0, 0, Math.PI / 2, 0, 0, 0.82, 1, 1);   // body
+  part(new THREE.CapsuleGeometry(0.1, 0.34, 2, 6), WHITE, 0, 0.22, 0.4, 0.75);                       // neck, up and forward
+  part(new THREE.BoxGeometry(0.13, 0.15, 0.36), WHITE, 0, 0.45, 0.7, 0.55);                          // head
+  part(new THREE.BoxGeometry(0.04, 0.46, 0.08), GILT, 0, 0.28, 0.33, 0.75);                          // mane
+  [-1, 1].forEach((sd) => {
+    part(new THREE.ConeGeometry(0.03, 0.09, 4), WHITE, sd * 0.045, 0.58, 0.58, -0.3);                 // ears
+    part(new THREE.CapsuleGeometry(0.04, 0.34, 1, 5), WHITE, sd * 0.09, -0.08, 0.3, -1.1);           // forelegs, tucked
+    part(new THREE.CapsuleGeometry(0.04, 0.4, 1, 5), WHITE, sd * 0.09, -0.26, -0.3, 0.45);           // hind legs, reaching
+    part(new THREE.OctahedronGeometry(0.035, 0), DARK, sd * 0.09, -0.16, 0.5);                        // hooves
+    part(new THREE.OctahedronGeometry(0.035, 0), DARK, sd * 0.09, -0.46, -0.4);
+  });
+  part(new THREE.ConeGeometry(0.07, 0.42, 6), GILT, 0, -0.02, -0.5, -2.2);                           // tail
+  part(new THREE.CylinderGeometry(0.19, 0.19, 0.06, 8, 1, false, -Math.PI / 2, Math.PI), RED, 0, 0.16, 0, 0, 0, Math.PI / 2, 1, 1, 1.4); // saddle
+  part(new THREE.BoxGeometry(0.4, 0.03, 0.3), GILT, 0, 0.13, 0);                                     // blanket
+  part(new THREE.BoxGeometry(0.15, 0.03, 0.06), RED, 0, 0.42, 0.78, 0.55);                           // bridle
+
+  let n = 0;
+  parts.forEach((p) => { n += p.geo.attributes.position.count; });
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const v = new THREE.Vector3(), nm = new THREE.Matrix3();
+  let o = 0;
+  parts.forEach(({ geo, m, color }) => {
+    const P = geo.attributes.position, N = geo.attributes.normal;
+    nm.getNormalMatrix(m);
+    for (let i = 0; i < P.count; i++, o++) {
+      v.fromBufferAttribute(P, i).applyMatrix4(m); pos.set([v.x, v.y, v.z], o * 3);
+      v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nor.set([v.x, v.y, v.z], o * 3);
+      col.set([color.r, color.g, color.b], o * 3);
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
 
 /* ============================================================ */
 export function buildWorld(parent) {
@@ -1389,93 +1647,219 @@ export function buildWorld(parent) {
   scene.add(carousel);
   keepOut(0, 0, CAROUSEL_R + 0.1);
 
-  const barWoodMat = mat({ color: 0x5a2a1c, roughness: 0.4, metalness: 0.3 });
-  const barTopMat = mat({ color: 0x140a08, roughness: 0.1, metalness: 0.95 });
+  /* An antique circus carousel with a bar built into it, which is what the
+     real one was: the counter where the horses' platform would be, a back
+     bar round the centre pole, and the whole top of the ride -- canopy,
+     painted rounding board, scalloped fringe, a thousand bulbs -- still on
+     it. The horses stayed too, on their brass poles between the stools,
+     going up and down as it turns. Sized to people: the bar top at 1.1 m
+     and 0.8 m deep, stools at 0.78, the rim of the canopy at 3 m. */
+  const BAR_TOP = 1.1, BAR_IN = 5.65;           // the counter runs BAR_IN..CAROUSEL_R
+  const RIM = 7.75, RIM_Y = 3.0;                // the canopy's edge, and its underside
+  const brass = mat({ color: 0xc9a048, roughness: 0.25, metalness: 0.9 });
+  const cAdd = (geo, m, x, y, z, ry = 0) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z); o.rotation.y = ry;
+    carousel.add(o);
+    return o;
+  };
 
-  const counter = new THREE.Mesh(
-    new THREE.CylinderGeometry(CAROUSEL_R, CAROUSEL_R, 1.3, 40, 1, true), barWoodMat);
-  counter.position.y = 0.65;
-  carousel.add(counter);
+  // the turntable: the ring of floor the stools stand on, which goes round
+  const deckTex = canvasTex(1024, 32, (g, w, h) => {
+    for (let i = 0; i < 96; i++) {
+      g.fillStyle = ['#3a1a0e', '#452212', '#3e1e10'][i % 3];
+      g.fillRect((i * w) / 96, 0, w / 96 + 1, h);
+      g.fillStyle = '#140804'; g.fillRect((i * w) / 96, 0, 1.5, h);
+    }
+  });
+  {
+    const deck = cAdd(new THREE.RingGeometry(CAROUSEL_R, RIM + 0.35, 72, 1),
+      new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.45, metalness: 0.15 }), 0, 0.012, 0);
+    deck.rotation.x = -Math.PI / 2;
+    // a RingGeometry's uvs are planar; wrap them round so the planks run radially
+    const P = deck.geometry.attributes.position, U = deck.geometry.attributes.uv;
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i);
+      U.setXY(i, (Math.atan2(y, x) / (Math.PI * 2) + 1) % 1, (Math.hypot(x, y) - CAROUSEL_R) / (RIM + 0.35 - CAROUSEL_R));
+    }
+    const edge = cAdd(new THREE.TorusGeometry(RIM + 0.35, 0.035, 6, 96), brass, 0, 0.03, 0);
+    edge.rotation.x = Math.PI / 2;
+  }
 
-  const counterTop = new THREE.Mesh(
-    new THREE.RingGeometry(4.8, CAROUSEL_R + 0.25, 40), barTopMat);
-  counterTop.rotation.x = -Math.PI / 2;
-  counterTop.position.y = 1.4;
-  carousel.add(counterTop);
+  // ---- the counter: red lacquer and gilt panels with little round mirrors
+  const barFront = canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#4a0c10'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 4; i++) {
+      const x = i * 128;
+      g.fillStyle = '#7a1418'; g.fillRect(x + 10, 12, 108, h - 30);
+      g.strokeStyle = '#c9a048'; g.lineWidth = 4; g.strokeRect(x + 14, 16, 100, h - 38);
+      const mg = g.createRadialGradient(x + 64, 56, 2, x + 64, 56, 22);
+      mg.addColorStop(0, '#c8d4dc'); mg.addColorStop(1, '#4a5660');
+      g.fillStyle = mg; g.beginPath(); g.arc(x + 64, 56, 20, 0, 7); g.fill();
+      g.strokeStyle = '#e0bc60'; g.lineWidth = 3; g.stroke();
+    }
+    g.fillStyle = '#0a0404'; g.fillRect(0, h - 14, w, 14);
+  }, [16, 1]);
+  cAdd(new THREE.CylinderGeometry(CAROUSEL_R, CAROUSEL_R, BAR_TOP - 0.04, 72, 1, true),
+    new THREE.MeshStandardMaterial({ map: barFront, roughness: 0.5, metalness: 0.2 }), 0, (BAR_TOP - 0.04) / 2, 0);
+  cAdd(new THREE.CylinderGeometry(BAR_IN, BAR_IN, BAR_TOP - 0.04, 48, 1, true),
+    mat({ color: 0x2a0a08, roughness: 0.6 }), 0, (BAR_TOP - 0.04) / 2, 0);
+  {
+    const top = cAdd(new THREE.RingGeometry(BAR_IN - 0.05, CAROUSEL_R + 0.12, 72),
+      mat({ color: 0x1a0806, roughness: 0.15, metalness: 0.5 }), 0, BAR_TOP, 0);
+    top.rotation.x = -Math.PI / 2;
+    // the padded leather roll you lean your elbows on
+    const roll = cAdd(new THREE.TorusGeometry(CAROUSEL_R + 0.1, 0.075, 8, 96),
+      mat({ color: 0x5a0e12, roughness: 0.55, metalness: 0.05 }), 0, BAR_TOP - 0.03, 0);
+    roll.rotation.x = Math.PI / 2;
+    const foot = cAdd(new THREE.TorusGeometry(CAROUSEL_R + 0.28, 0.025, 6, 96), brass, 0, 0.24, 0);
+    foot.rotation.x = Math.PI / 2;
+  }
 
-  const well = new THREE.Mesh(
-    new THREE.CylinderGeometry(4.8, 4.8, 1.0, 32, 1, true), barWoodMat);
-  well.position.y = 0.5;
-  carousel.add(well);
+  // ---- the back bar: a mirrored drum where the ride's engine was, with
+  // shelves of bottles round it lit from below
+  const drumTex = mirrorTex([10, 3]);
+  cAdd(new THREE.CylinderGeometry(1.5, 1.5, RIM_Y + 0.6, 24, 1, true),
+    new THREE.MeshStandardMaterial({ map: drumTex, emissiveMap: drumTex, emissive: 0xffffff,
+      emissiveIntensity: 0.3, roughness: 0.2, metalness: 0.6 }), 0, (RIM_Y + 0.6) / 2, 0);
+  [0.05, 1.05, RIM_Y + 0.55].forEach((y) => cAdd(new THREE.CylinderGeometry(1.58, 1.58, 0.1, 24), brass, 0, y, 0));
+  cAdd(new THREE.CylinderGeometry(3.7, 3.7, 1.0, 48, 1, true), mat({ color: 0x3a1a0c, roughness: 0.5 }), 0, 0.5, 0);
+  {
+    const shelfTop = cAdd(new THREE.RingGeometry(1.5, 3.72, 48), mat({ color: 0x1a0806, roughness: 0.2, metalness: 0.5 }), 0, 1.0, 0);
+    shelfTop.rotation.x = -Math.PI / 2;
+  }
+  const SHELVES = [1.02, 1.5, 1.95];
+  SHELVES.slice(1).forEach((y) => {
+    const sh = cAdd(new THREE.RingGeometry(2.9, 3.3, 48), mat({ color: 0x3a1a0c, roughness: 0.5, side: THREE.DoubleSide }), 0, y - 0.02, 0);
+    sh.rotation.x = -Math.PI / 2;
+  });
+  const bottleCols = [0xc87a20, 0x2e6a28, 0xd8d0b8, 0x8a2010, 0xe0a030, 0x3a4a6a, 0x6a3a14];
+  const PER_SHELF = 56;
+  const bottles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.045, 0.05, 0.3, 7),
+    new THREE.MeshStandardMaterial({ roughness: 0.15, metalness: 0.1, emissive: 0x3a2a18 }), PER_SHELF * SHELVES.length);
+  {
+    const m = new THREE.Matrix4(), c = new THREE.Color();
+    let n = 0;
+    SHELVES.forEach((y, k) => {
+      for (let i = 0; i < PER_SHELF; i++) {
+        const a = ((i + k * 0.5) / PER_SHELF) * Math.PI * 2;
+        const r = y < 1.2 ? 3.45 : 3.1;
+        m.makeScale(1, 0.8 + ((i * 7 + k) % 5) * 0.1, 1);
+        m.setPosition(Math.sin(a) * r, y + 0.15, Math.cos(a) * r);
+        bottles.setMatrixAt(n, m);
+        bottles.setColorAt(n++, c.setHex(bottleCols[(i * 3 + k) % bottleCols.length]));
+      }
+    });
+    bottles.instanceMatrix.needsUpdate = true;
+  }
+  carousel.add(bottles);
 
-  // the canopy, and the ring of bulbs under its rim
-  const canopy = new THREE.Mesh(
-    new THREE.ConeGeometry(CAROUSEL_R + 1.4, 2.6, 32, 1, true),
-    new THREE.MeshBasicMaterial({ map: bigTopTexture(), side: THREE.DoubleSide })
-  );
-  canopy.position.y = 5.1;
-  carousel.add(canopy);
-
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.28, 5.2, 12),
-    mat({ color: C.trim, roughness: 0.25, metalness: 0.95 }));
-  pole.position.y = 2.6;
-  carousel.add(pole);
-
-  const bulbGeo = new THREE.SphereGeometry(0.15, 8, 6);
-  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe9b0 });
-  const bulbs = new THREE.InstancedMesh(bulbGeo, bulbMat, 36);
+  // ---- the top of the ride
+  cAdd(new THREE.ConeGeometry(RIM, 2.3, 48, 1, true),
+    new THREE.MeshBasicMaterial({ map: bigTopTexture(), side: THREE.DoubleSide }), 0, RIM_Y + 1.25 + 1.15, 0);
+  cAdd(new THREE.SphereGeometry(0.28, 12, 8), brass, 0, RIM_Y + 1.25 + 2.35, 0);
+  // the rounding board: painted panels, mirrors and the name, all the way round
+  const board = canvasTex(1024, 128, (g, w, h) => {
+    g.fillStyle = '#f0e2c0'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#8a1018'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14);
+    g.fillStyle = '#c9a048'; g.fillRect(0, 14, w, 4); g.fillRect(0, h - 18, w, 4);
+    const mirror = (x) => {
+      const mg = g.createRadialGradient(x, 64, 4, x, 64, 34);
+      mg.addColorStop(0, '#dfe8ee'); mg.addColorStop(1, '#56626c');
+      g.fillStyle = mg; g.beginPath(); g.ellipse(x, 64, 42, 30, 0, 0, 7); g.fill();
+      g.strokeStyle = '#c9a048'; g.lineWidth = 6; g.stroke();
+    };
+    const star = (x) => {
+      g.fillStyle = '#8a1018'; g.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2 - Math.PI / 2, r = k % 2 ? 11 : 26;
+        g.lineTo(x + Math.cos(a) * r, 64 + Math.sin(a) * r);
+      }
+      g.fill();
+    };
+    mirror(70); star(170); mirror(954); star(854);
+    g.fillStyle = '#8a1018'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 58px Georgia, serif';
+    g.fillText('MERRY-GO-ROUND  BAR', 512, 68);
+    g.strokeStyle = '#c9a048'; g.lineWidth = 1.5; g.strokeText('MERRY-GO-ROUND  BAR', 512, 68);
+  }, [4, 1]);
+  cAdd(new THREE.CylinderGeometry(RIM, RIM, 0.95, 64, 1, true),
+    new THREE.MeshStandardMaterial({ map: board, emissiveMap: board, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.6 }),
+    0, RIM_Y + 0.35 + 0.475, 0);
+  // the fringe under it: red scallops edged in gold
+  const fringe = canvasTex(256, 64, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    for (let i = 0; i < 8; i++) {
+      const x = i * 32 + 16;
+      g.fillStyle = '#c9a048'; g.beginPath(); g.moveTo(x - 16, 0); g.lineTo(x + 16, 0);
+      g.arc(x, 0, 16, 0, Math.PI); g.fill();
+      g.fillStyle = i % 2 ? '#8a1018' : '#f0e2c0'; g.beginPath(); g.moveTo(x - 14, 0); g.lineTo(x + 14, 0);
+      g.arc(x, 0, 14, 0, Math.PI); g.fill();
+    }
+  }, [24, 1]);
+  cAdd(new THREE.CylinderGeometry(RIM + 0.01, RIM + 0.01, 0.35, 64, 1, true),
+    new THREE.MeshStandardMaterial({ map: fringe, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.7 }),
+    0, RIM_Y + 0.175, 0);
+  // and the neon they fitted it with in Las Vegas, round the top of the board
+  {
+    const neon = cAdd(new THREE.TorusGeometry(RIM + 0.04, 0.035, 6, 128), new THREE.MeshBasicMaterial({ color: 0xff4a8a }),
+      0, RIM_Y + 1.33, 0);
+    neon.rotation.x = Math.PI / 2;
+  }
+  // bulbs along the top and bottom of the board
+  const BULBS = 72;
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe9b0 });   // update() makes it flicker
+  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.055, 6, 4), bulbMat, BULBS * 2);
   {
     const m = new THREE.Matrix4();
-    for (let i = 0; i < 36; i++) {
-      const a = (i / 36) * Math.PI * 2;
-      m.identity();
-      m.setPosition(Math.sin(a) * (CAROUSEL_R + 1.2), 3.95, Math.cos(a) * (CAROUSEL_R + 1.2));
+    for (let i = 0; i < BULBS * 2; i++) {
+      const a = ((i % BULBS) / BULBS) * Math.PI * 2;
+      m.makeTranslation(Math.sin(a) * (RIM + 0.06), i < BULBS ? RIM_Y + 0.4 : RIM_Y + 1.25, Math.cos(a) * (RIM + 0.06));
       bulbs.setMatrixAt(i, m);
     }
     bulbs.instanceMatrix.needsUpdate = true;
   }
   carousel.add(bulbs);
 
-  // barley-twist poles, because it is a carousel
-  const twistMat = mat({ color: 0xc02030, roughness: 0.35, metalness: 0.6 });
-  const twistGeo = new THREE.CylinderGeometry(0.1, 0.1, 3.9, 8);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const p = new THREE.Mesh(twistGeo, twistMat);
-    p.position.set(Math.sin(a) * (CAROUSEL_R + 1.1), 2.0, Math.cos(a) * (CAROUSEL_R + 1.1));
-    carousel.add(p);
-  }
-
-  // stools on the outside, and the seats the crowd will use
-  const seatMat = mat({ color: 0x4a2a16, roughness: 0.55, metalness: 0.3 });
-  const stoolGeo = new THREE.CylinderGeometry(0.34, 0.28, 0.78, 10);
+  // ---- stools, and the seats the crowd will use
   const CAROUSEL_STOOLS = 14;
   for (let i = 0; i < CAROUSEL_STOOLS; i++) {
     const a = (i / CAROUSEL_STOOLS) * Math.PI * 2;
-    const s = new THREE.Mesh(stoolGeo, seatMat);
-    s.position.set(Math.sin(a) * (CAROUSEL_R + 1.0), 0.39, Math.cos(a) * (CAROUSEL_R + 1.0));
-    carousel.add(s);
+    addStool(carousel, Math.sin(a) * (CAROUSEL_R + 1.0), Math.cos(a) * (CAROUSEL_R + 1.0));
     // riders go round with the bar, facing in toward the bottles
     spots.barSpots.push({ orbit: { r: CAROUSEL_R + 1.0, a0: a } });
   }
 
-  const BOTTLE_N = 30;
-  const bottleCols = [0xb6ff2e, 0xffb400, 0x12e2e2, 0xa03cff, 0xff2d1f, 0xff7ad9];
-  const bottles = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.15, 0.19, 0.85, 8), new THREE.MeshBasicMaterial(), BOTTLE_N);
-  {
-    const m = new THREE.Matrix4(), c = new THREE.Color();
-    for (let i = 0; i < BOTTLE_N; i++) {
-      const a = (i / BOTTLE_N) * Math.PI * 2;
-      m.identity();
-      m.setPosition(Math.sin(a) * 3.4, 1.5, Math.cos(a) * 3.4);
-      bottles.setMatrixAt(i, m);
-      bottles.setColorAt(i, c.setHex(bottleCols[i % bottleCols.length]));
-    }
-    bottles.instanceMatrix.needsUpdate = true;
+  // ---- the horses, between the stools, on twisted brass poles from the
+  // turntable to the canopy
+  const poleGeo = new THREE.CylinderGeometry(0.045, 0.045, RIM_Y + 0.02, 8);
+  const horses = new THREE.InstancedMesh(horseGeometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.4, metalness: 0.15, emissive: 0x201410 }), CAROUSEL_STOOLS);
+  const horseAt = [];
+  for (let i = 0; i < CAROUSEL_STOOLS; i++) {
+    const a = ((i + 0.5) / CAROUSEL_STOOLS) * Math.PI * 2;
+    const x = Math.sin(a) * (RIM - 0.25), z = Math.cos(a) * (RIM - 0.25);
+    cAdd(poleGeo, brass, x, (RIM_Y + 0.02) / 2, z);
+    // nose first round the ride: rotation.y grows, so a point at angle a
+    // travels toward a + PI/2
+    horseAt.push({ x, z, ry: a + Math.PI / 2, phase: i * 1.7 });
+    horses.setColorAt(i, new THREE.Color(i % 3 === 1 ? 0x6a5a50 : i % 3 === 2 ? 0xd8c8a8 : 0xffffff));
   }
-  carousel.add(bottles);
+  carousel.add(horses);
+  const hM = new THREE.Matrix4(), hQ = new THREE.Quaternion(), hP = new THREE.Vector3(), hS = new THREE.Vector3(1, 1, 1);
+  const Y_AXIS = new THREE.Vector3(0, 1, 0);
+  const rideHorses = (t) => {
+    horseAt.forEach((h, i) => {
+      hQ.setFromAxisAngle(Y_AXIS, h.ry);
+      // high enough that the lowest hoof at the bottom of the bob clears a
+      // standing man's eyes: at head height they swept through the face of
+      // anyone at the counter, and filled the screen when you came to here
+      hP.set(h.x, 2.4 + Math.sin(t * 1.4 + h.phase) * 0.16, h.z);
+      horses.setMatrixAt(i, hM.compose(hP, hQ, hS));
+    });
+    horses.instanceMatrix.needsUpdate = true;
+  };
+  rideHorses(0);
 
   /* ================================ THE TRAPEZE, overhead */
   const rigMat = mat({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.8 });
@@ -1578,21 +1962,20 @@ export function buildWorld(parent) {
     spots.midway.push({ x: Math.sin(a) * 31.2, z: Math.cos(a) * 31.2, ry: a, y: MEZZ_Y });
   }
 
-  /* ======================= SLOT SPOKES around the rotunda */
-  const slotBodyMat = mat({ color: 0x3a2a26, roughness: 0.45, metalness: 0.45 });
-  const slotBodyGeo = new THREE.BoxGeometry(1.5, 2.1, 1.1);
-  const slotHeadGeo = new THREE.BoxGeometry(1.5, 0.75, 1.1);
-  const crownGeo = new THREE.BoxGeometry(1.55, 0.14, 1.15);
-  const screenGeo = new THREE.PlaneGeometry(1.1, 0.9);
-  const stripCols = [0xff2d1f, 0x12e2e2, 0xffb400, 0xa03cff, 0xb6ff2e];
-
+  /* ======================= THE SLOTS
+     Sized off the real thing. A Bally upright of 1970 is 41 cm wide, 46
+     deep and 86 tall with its sign, and it stands on a base in a long
+     bank of them, so the top of the sign is about level with your eyes.
+     These were 1.5 m wide and three metres tall -- twice the height of the
+     people playing them. */
   const SCREEN_POOL = 8;
   const screens = [];
   for (let i = 0; i < SCREEN_POOL; i++) {
-    const tex = slotScreenTexture();
+    const tex = slotScreenTexture(i);
     rollScreen(tex);
     screens.push({ tex, mat: new THREE.MeshBasicMaterial({ map: tex }), t: Math.random() * 3 });
   }
+  const SLOT = { w: 0.44, h: 0.72, d: 0.42, base: 0.78, sign: 0.22 };
 
   /* Casinos do not lay machines on radial spokes -- that was a diagram, not
      a floor. A real floor is a GRID: banks of machines set back-to-back in
@@ -1602,9 +1985,12 @@ export function buildWorld(parent) {
      here is a circle, so the banks get shorter as they approach the wall.
      A lane is left clear on the centre line, because that is the walk from
      the lobby mouth to the bar and on to the elevators. */
-  const ROW_Z   = [10.5, 15.5, 20.5, 25.5, 30.5];  // mirrored to -Z
-  const PITCH   = 1.72;   // machines along a run
-  const BACK    = 0.55;   // half the depth of a back-to-back bank
+  // A bank with its stools is two metres across, so rows 3.4 m apart
+  // leave an aisle you walk down between the stool backs -- as tight as a
+  // real floor. (At five metres the real-size banks sat in open carpet.)
+  const ROW_Z   = [10.6, 14.0, 17.4, 20.8, 24.2, 27.6, 31.0];  // mirrored to -Z
+  const PITCH   = 0.62;   // machines along a bank
+  const BACK    = 0.3;    // bank centre line to a cabinet's centre
   // Cross-aisles every eight metres. With only one pair of them the walk
   // from the lobby to the bar ran head-first into a bank and you slid
   // along it blind for twenty metres, because the banks run east-west and
@@ -1617,70 +2003,113 @@ export function buildWorld(parent) {
     const rad = Math.hypot(x, z);
     if (rad > 33.0 || rad < 9.6) return true;             // wall, and the bar
     if (Math.abs(x) < 4.6) return true;                   // the centre walk
-    if (AISLE_X.some((ax) => Math.abs(x - ax) < 1.7)) return true;
+    if (AISLE_X.some((ax) => Math.abs(x - ax) < 1.4)) return true;
     if (Math.abs(z) > 25.5 && Math.abs(x) < 7.5) return true;  // the two mouths
     return false;
   };
 
+  const runs = [];                   // each side of each bank, as unbroken runs
   ROW_Z.forEach((rz) => {
     [-1, 1].forEach((zs) => {
       const rowZ = rz * zs;
-      for (let x = -32; x <= 32; x += PITCH) {
-        [-1, 1].forEach((face) => {
-          // face -1 looks toward -Z, face +1 toward +Z; the pair sit
-          // back-to-back so each one shows its screen to its own aisle
-          const z = rowZ + BACK * face;
-          if (blocked(x, z)) return;
-          machines.push({ x, z, ry: face > 0 ? 0 : Math.PI,
-                          side: face, perX: 0, perZ: face });
-          // the cabinet is 1.5 across and 1.1 deep and they all face
-          // +/-Z, so the footprint is known exactly. A square 1.9 x 1.9
-          // box was 20cm of invisible wall down each side and 40cm off
-          // each end -- in an aisle of these you feel every centimetre.
-          box(x, z, 0.78, 0.58);
-        });
-      }
+      [-1, 1].forEach((face) => {
+        // face -1 looks toward -Z, face +1 toward +Z; the pair sit
+        // back-to-back so each one shows its screen to its own aisle
+        const z = rowZ + BACK * face;
+        let run = null;
+        for (let x = -32; x <= 32; x += PITCH) {
+          if (blocked(x, z)) { run = null; continue; }
+          machines.push({ x, z, ry: face > 0 ? 0 : Math.PI, side: face, perX: 0, perZ: face, rowZ });
+          if (!run) runs.push(run = { x0: x, x1: x, rowZ, face });
+          run.x1 = x;
+        }
+      });
     });
   });
+  // A collider per run, not per machine: a thousand boxes would be a
+  // thousand tests a frame, and a bank is solid along its length anyway.
+  runs.forEach((r) => box((r.x0 + r.x1) / 2, r.rowZ + r.face * 0.29,
+    (r.x1 - r.x0) / 2 + PITCH / 2, 0.29));
 
-  const N = machines.length;
-  const slotBodies = new THREE.InstancedMesh(slotBodyGeo, slotBodyMat, N);
-  const slotHeads = new THREE.InstancedMesh(slotHeadGeo, slotBodyMat, N);
-  const crownMat = new THREE.MeshBasicMaterial();
-  const slotCrowns = new THREE.InstancedMesh(crownGeo, crownMat, N);
+  // the lit sign on top: white glass, tinted per machine, flickering
+  const crownMat = new THREE.MeshBasicMaterial({ map: canvasTex(128, 64, (g, w, h) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1a0a08'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 26px Georgia, serif'; g.fillText('JACKPOT', w / 2, h / 2 + 1);
+    g.strokeStyle = '#1a0a08'; g.lineWidth = 3; g.strokeRect(3, 3, w - 6, h - 6);
+  }) });
+  const SLOT_PARTS = {
+    // the base is one long box per run: the bank is a single piece of
+    // furniture, and a box per machine was a thousand more for nothing
+    base: [new THREE.BoxGeometry(1, SLOT.base, 0.58), mat({ color: 0x3a0e10, roughness: 0.7, metalness: 0.1 })],
+    body: [new THREE.BoxGeometry(SLOT.w, SLOT.h, SLOT.d), mat({ color: 0xa8a8b0, roughness: 0.3, metalness: 0.85 })],
+    crown: [new THREE.BoxGeometry(SLOT.w, SLOT.sign, 0.3), crownMat],
+    tray: [new THREE.BoxGeometry(0.3, 0.07, 0.12), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
+    // a thousand-odd of each, so they are as plain as they can be and still
+    // read at arm's length: a four-sided rod, an eight-sided ball
+    rod: [new THREE.CylinderGeometry(0.014, 0.014, 0.36, 4, 1, true), mat({ color: 0xd0d0d8, roughness: 0.15, metalness: 0.95 })],
+    knob: [new THREE.OctahedronGeometry(0.045, 0), mat({ color: 0xc8101a, roughness: 0.25, metalness: 0.2 })],
+  };
+  const screenGeo = new THREE.PlaneGeometry(SLOT.w - 0.04, SLOT.h - 0.04);
+  const stripCols = [0xff4a3a, 0x3ae2ff, 0xffc83a, 0xc07aff, 0xb6ff4a, 0xff7ad9];
   {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const p = new THREE.Vector3();
     const one = new THREE.Vector3(1, 1, 1);
     const axis = new THREE.Vector3(0, 1, 0);
+    const tilt = new THREE.Quaternion();
     const c = new THREE.Color();
-    machines.forEach((b, i) => {
-      q.setFromAxisAngle(axis, b.ry);
-      p.set(b.x, 1.05, b.z); m.compose(p, q, one); slotBodies.setMatrixAt(i, m);
-      p.set(b.x, 2.5, b.z); m.compose(p, q, one); slotHeads.setMatrixAt(i, m);
-      p.set(b.x, 2.92, b.z); m.compose(p, q, one); slotCrowns.setMatrixAt(i, m);
-      slotCrowns.setColorAt(i, c.setHex(stripCols[i % stripCols.length]));
+    const cabY = SLOT.base + SLOT.h / 2;
 
+    // One set of instanced parts for the whole floor. (Split into halves or
+    // quarters to be culled, the parts cost more draws than they saved: a
+    // bounding sphere round a quarter of this room is in view from almost
+    // anywhere in it.)
+    {
+      const list = machines, runList = runs;
+      const P = {};
+      for (const key in SLOT_PARTS) {
+        P[key] = new THREE.InstancedMesh(...SLOT_PARTS[key], key === 'base' ? runList.length : list.length);
+      }
+      const put = (mesh, i, x, y, z, qq = q) => { p.set(x, y, z); m.compose(p, qq, one); mesh.setMatrixAt(i, m); };
+      list.forEach((b, i) => {
+        q.setFromAxisAngle(axis, b.ry);
+        const f = b.perZ;
+        put(P.body, i, b.x, cabY, b.z);
+        put(P.crown, i, b.x, SLOT.base + SLOT.h + SLOT.sign / 2, b.z - f * 0.04);
+        put(P.tray, i, b.x, SLOT.base + 0.07, b.z + f * (SLOT.d / 2 + 0.05));
+        // the handle, on the right as you face the machine, leant back a little
+        const side = -f;                 // the machine's own right, in world x
+        tilt.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.25 * f);
+        put(P.rod, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.12, b.z + f * 0.02, tilt);
+        put(P.knob, i, b.x + side * (SLOT.w / 2 + 0.04), cabY + 0.31, b.z - f * 0.03);
+        // a colour to each stretch of bank, the way a floor is zoned by game
+        P.crown.setColorAt(i, c.setHex(stripCols[Math.abs(Math.floor(b.x / 8) * 3 + Math.round(b.rowZ)) % stripCols.length]));
+      });
+      runList.forEach((r, i) => {
+        p.set((r.x0 + r.x1) / 2, SLOT.base / 2, r.rowZ + r.face * 0.29);
+        P.base.setMatrixAt(i, m.compose(p, q.identity(), new THREE.Vector3(r.x1 - r.x0 + PITCH, 1, 1)));
+      });
+      for (const key in P) { P[key].instanceMatrix.needsUpdate = true; P[key].computeBoundingSphere(); scene.add(P[key]); }
+    }
+
+    machines.forEach((b, i) => {
+      const f = b.perZ;
+      // the face: one of the shared canvases
       b.screen = i % SCREEN_POOL;
       const sc = new THREE.Mesh(screenGeo, screens[b.screen].mat);
-      sc.position.set(b.x + b.perX * 0.57, 1.55, b.z + b.perZ * 0.57);
+      sc.position.set(b.x, cabY, b.z + f * (SLOT.d / 2 + 0.003));
       sc.rotation.y = b.ry;
       scene.add(sc);
 
-      if (i % 3 === 0) {
-        const sx = b.x + b.perX * 1.5, sz = b.z + b.perZ * 1.5;
-        const stool = new THREE.Mesh(stoolGeo, seatMat);
-        stool.position.set(sx, 0.39, sz);
-        scene.add(stool);
+      if (i % 4 === 0) {
+        const sx = b.x, sz = b.z + f * 0.72;
+        addStool(scene, sx, sz);
         spots.slotSeats.push({ x: sx, z: sz, ry: b.ry + Math.PI });
       }
     });
-    slotBodies.instanceMatrix.needsUpdate = true;
-    slotHeads.instanceMatrix.needsUpdate = true;
-    slotCrowns.instanceMatrix.needsUpdate = true;
   }
-  scene.add(slotBodies, slotHeads, slotCrowns);
   buildPits(scene, box, mat, spots);
 
   /* ===================== REGISTRATION WING, to the north */
@@ -1725,41 +2154,7 @@ export function buildWorld(parent) {
   lobCeil.position.set(0, 7.0, -42.5);
   scene.add(lobCeil);
 
-  const deskMat = mat({ color: 0x5a3418, roughness: 0.45, metalness: 0.3 });
-  const desk = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 18), deskMat);
-  desk.position.set(-17, 0.6, -43);
-  scene.add(desk);
-  // solid from the counter front back to the lobby wall. If the collider
-  // is allowed to overhang the wall instead, the push-out shoves you
-  // out of bounds and the containment clamp drops you behind the desk.
-  box(-17.6, -43, 1.9, 9);
-
-  const deskTop = new THREE.Mesh(
-    new THREE.BoxGeometry(3.3, 0.16, 18.6),
-    mat({ color: C.trim, roughness: 0.3, metalness: 0.85 }));
-  deskTop.position.set(-17, 1.28, -43);
-  scene.add(deskTop);
-
-  const pigeon = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 5.0, 18),
-    mat({ color: 0x3a1c10, roughness: 0.7, metalness: 0.2 }));
-  pigeon.position.set(-19.3, 2.5, -43);
-  scene.add(pigeon);
-
-  const holes = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(0.12, 0.34, 0.5),
-    new THREE.MeshBasicMaterial({ color: 0x1a0d06 }), 108);
-  {
-    const m = new THREE.Matrix4();
-    let i = 0;
-    for (let r = 0; r < 6; r++) for (let cI = 0; cI < 18; cI++) {
-      m.identity();
-      m.setPosition(-18.9, 1.5 + r * 0.55, -51 + cI * 0.95);
-      holes.setMatrixAt(i++, m);
-    }
-    holes.instanceMatrix.needsUpdate = true;
-  }
-  scene.add(holes);
+  buildFrontDesk(scene, box, mat, spots);
 
   // queue rail
   const railMat = mat({ color: 0x8a1420, roughness: 0.9 });
@@ -1848,7 +2243,7 @@ export function buildWorld(parent) {
   };
   const signs = [
     addSign('BAZOOKO CIRCUS', '#ff2d6a', 0, 12.5, -30.5, 0, 34, 7),
-    addSign('REGISTRATION', '#ffb400', -18.7, 6.0, -43, Math.PI / 2, 15, 3.8),
+    addSign('REGISTRATION', '#ffb400', -19.36, 4.05, -43, Math.PI / 2, 7.6, 1.9),
     // over the way out, on the inside, the way every hotel does it
     addSign('EXIT', '#ff2d1f', -7, 3.7, LOB_Z1 + 0.56, 0, 3.2, 0.8),
     addSign('ELEVATORS', '#b6ff2e', 0, 5.6, 54.2, Math.PI, 15, 3.6),
@@ -1870,8 +2265,10 @@ export function buildWorld(parent) {
     ringPath(8.0, 16, 0),
     ringPath(8.6, 16, 0.4),
     ringPath(32.6, 20, 0.2),
-    [{ x: -4, z: -52 }, { x: -4, z: -34 }, { x: -4, z: -14 }, { x: 5, z: -14 },
-     { x: 5, z: -34 }, { x: 5, z: -52 }],
+    // (in the centre walk, where no bank reaches: at x = 5 the real-size
+    // banks, a machine every 62 cm, stood in the way)
+    [{ x: -4, z: -52 }, { x: -4, z: -34 }, { x: -4, z: -14 }, { x: 3.8, z: -14 },
+     { x: 3.8, z: -34 }, { x: 3.8, z: -52 }],
     [{ x: 2, z: 50 }, { x: 2, z: 34 }, { x: 2, z: 16 }, { x: -7, z: 16 },
      { x: -7, z: 34 }, { x: -7, z: 50 }],
   ];
@@ -1937,6 +2334,7 @@ export function buildWorld(parent) {
 
     // the bar turns all night. slowly, unless you are not well.
     carousel.rotation.y = t * (0.055 + s.wreck * 0.10);
+    rideHorses(t);
 
     // the acts work directly over the gamblers' heads
     swingers.forEach((sw, i) => {
