@@ -1,2 +1,5 @@
 # screenshots from tools/smoke.mjs
 shots/
+node_modules/
+dist/
+.DS_Store
