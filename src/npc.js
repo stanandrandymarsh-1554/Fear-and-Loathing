@@ -10,27 +10,86 @@
 import * as THREE from 'three';
 
 
-function makeHumanHead(skin) {
-  const g = new THREE.Group();
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 18, 14),
-    new THREE.MeshStandardMaterial({
-      color: skin, roughness: 0.72, metalness: 0.05,
-      emissive: skin, emissiveIntensity: 0.22,
-    })
-  );
-  head.scale.set(1, 1.12, 0.92);
-  g.add(head);
+/* ============================================================
+   A PERSON, as a little jointed puppet.
 
-  const eyeGeo = new THREE.SphereGeometry(0.045, 8, 8);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
-  [-0.1, 0.1].forEach((x) => {
-    const e = new THREE.Mesh(eyeGeo, eyeMat);
-    e.position.set(x, 0.05, 0.235);
-    g.add(e);
-  });
-  return g;
+   They used to be a capsule on a capsule with a ball on top -- a
+   Russian doll that swayed. Now each of them is a skeleton of joints
+   (pelvis, spine, neck, head, shoulders, elbows, hands, hips, knees,
+   ankles) with the body hung off it in low-poly pieces, a face that can
+   blink and talk, and clothes that say who they are.
+
+   Nothing here is keyframed. Every frame the joints are worked out from
+   what the person is doing -- standing, sitting, lying in a bath, leaning
+   on a counter, walking (read off how far they actually moved), talking
+   (the mouth, the head, the hands), listening, or one of a handful of
+   gestures a line of dialogue can ask for -- and eased toward that, so
+   everything blends into everything else.
+
+   Rotation conventions, for a limb hanging straight down in a joint:
+   rotation.x < 0 swings it FORWARD (+Z, the way they face), > 0 back;
+   rotation.z swings it out to +X (so -z is out for a left limb).
+   ============================================================ */
+
+const GEO = {};
+const geo = (key, make) => GEO[key] || (GEO[key] = make());
+const cap = (r, l, a = 3, b = 8) => geo(`cap${r},${l},${a},${b}`, () => new THREE.CapsuleGeometry(r, l, a, b));
+const sph = (r, w = 10, h = 8) => geo(`sph${r},${w},${h}`, () => new THREE.SphereGeometry(r, w, h));
+const box = (x, y, z) => geo(`box${x},${y},${z}`, () => new THREE.BoxGeometry(x, y, z));
+const cyl = (a, b, h, n = 10) => geo(`cyl${a},${b},${h},${n}`, () => new THREE.CylinderGeometry(a, b, h, n));
+
+const DARK = new THREE.MeshStandardMaterial({ color: 0x0c0a0a, roughness: 0.6 });
+const EYE_WHITE = new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.4, emissive: 0x302c28 });
+const LIP = new THREE.MeshStandardMaterial({ color: 0x7a3a34, roughness: 0.6, emissive: 0x200c0a });
+const SHOE = new THREE.MeshStandardMaterial({ color: 0x1a1412, roughness: 0.5, metalness: 0.2, emissive: 0x0a0808 });
+const GOLD = new THREE.MeshStandardMaterial({ color: 0xd8b040, roughness: 0.3, metalness: 0.8, emissive: 0x302000 });
+
+/* the attorney's shirt: something loud, from a rack in Acapulco */
+let _loud = null;
+function loudShirt() {
+  if (_loud) return _loud;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#b8261c'; g.fillRect(0, 0, 128, 128);
+  const cols = ['#ffb400', '#ff6a2d', '#f4e9c8', '#2a1a10', '#ff2d6a'];
+  let s = 7;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) {
+    const x = r() * 128, y = r() * 128, R = 6 + r() * 10;
+    g.fillStyle = cols[i % cols.length];
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2 + i;
+      g.beginPath(); g.ellipse(x + Math.cos(a) * R * 0.6, y + Math.sin(a) * R * 0.6, R * 0.45, R * 0.25, a, 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = '#2a1a10'; g.beginPath(); g.arc(x, y, R * 0.22, 0, Math.PI * 2); g.fill();
+  }
+  _loud = new THREE.CanvasTexture(cv);
+  _loud.colorSpace = THREE.SRGBColorSpace;
+  _loud.wrapS = _loud.wrapT = THREE.RepeatWrapping;
+  return _loud;
 }
+
+/* Who wears what. Anything left out falls back to the config's suit and
+   skin, so a new face needs nothing but a colour to be somebody. */
+const LOOKS = {
+  // big, loud, moustached, shirt open to the sternum and a medallion in it
+  attorney: { width: 1.2, belly: 1.12, hair: 'curly', hairCol: 0x1a120c, stache: true,
+    shirt: 'loud', open: true, chain: true, jacket: null, trousers: 0x2e2a30, energy: 1.7 },
+  // in the tub: the same man with no shirt at all
+  bath: { width: 1.2, belly: 1.12, hair: 'curly', hairCol: 0x1a120c, stache: true,
+    shirt: 'skin', jacket: null, trousers: 0x2e2a30, energy: 1.7 },
+  clerk: { hair: 'bun', hairCol: 0xc8a060, shirt: 0xf0e6d2, tie: null, skirt: true, energy: 0.7, width: 0.9 },
+  bartender: { hair: 'short', hairCol: 0x2a1a10, shirt: 0xf2eee4, vest: 0x161618, tie: 'bow', jacket: null, energy: 0.9 },
+  security: { width: 1.18, hair: 'short', hairCol: 0x100c0a, shades: true, shirt: 0xe8e4dc, tie: 0x101010, energy: 0.5 },
+  valet: { hair: 'short', hairCol: 0x3a2412, hat: 'cap', hatCol: 0x7a1420, shirt: 0xf0ece0, tie: 0x101010, energy: 0.8 },
+  maid: { hair: 'bun', hairCol: 0x3a2412, hat: 'maid', shirt: null, apron: true, skirt: true, energy: 0.9, width: 0.92 },
+  registrar: { hair: 'long', hairCol: 0x6a4422, shirt: 0xf4efe4, tie: null, skirt: true, energy: 0.8, width: 0.9 },
+  georgia: { width: 1.25, belly: 1.25, hair: 'bald', hairCol: 0xd8d4cc, shirt: 0xf2eee4, tie: 0x8a1a1a, glasses: true, energy: 1.2 },
+  keynote: { hair: 'bald', hairCol: 0x8a8278, glasses: true, shirt: 0xf2eee4, tie: 0x2a3a6a, energy: 1.3 },
+  patrol: { width: 1.08, hair: 'short', hairCol: 0x4a3018, hat: 'patrol', hatCol: 0x2a2a2a, shades: true,
+    jacket: 0xb8a878, shirt: null, trousers: 0x2a2a30, belt: true, energy: 0.9 },
+};
 
 function makeLizardHead() {
   const g = new THREE.Group();
@@ -115,9 +174,84 @@ function haloTexture() {
   return _haloTex;
 }
 
+/* Everything on one joint that is the same material becomes one mesh. A
+   person is sixty-odd little pieces as built and would be sixty-odd draw
+   calls each; merged, the head is a handful and the whole body about
+   thirty. Pieces that animate on their own are marked userData.keep. */
+function mergeGeos(list) {
+  let nv = 0, ni = 0;
+  for (const g of list) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2);
+  const idx = new (nv > 65535 ? Uint32Array : Uint16Array)(ni);
+  let vo = 0, io = 0;
+  for (const g of list) {
+    const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
+    pos.set(P.array.subarray(0, P.count * 3), vo * 3);
+    if (N) nor.set(N.array.subarray(0, P.count * 3), vo * 3);
+    if (U) uv.set(U.array.subarray(0, P.count * 2), vo * 2);
+    if (g.index) for (let k = 0; k < g.index.count; k++) idx[io++] = g.index.getX(k) + vo;
+    else for (let k = 0; k < P.count; k++) idx[io++] = k + vo;
+    vo += P.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+function mergeParts(root) {
+  const joints = [];
+  root.traverse((o) => { if (o.isGroup || o === root) joints.push(o); });
+  for (const j of joints) {
+    const buckets = new Map();
+    for (const c of j.children) {
+      if (!c.isMesh || c.userData.keep || c.children.length) continue;
+      if (!buckets.has(c.material)) buckets.set(c.material, []);
+      buckets.get(c.material).push(c);
+    }
+    for (const [m, list] of buckets) {
+      if (list.length < 2) continue;
+      const geos = list.map((c) => { c.updateMatrix(); return c.geometry.clone().applyMatrix4(c.matrix); });
+      list.forEach((c) => j.remove(c));
+      j.add(new THREE.Mesh(mergeGeos(geos), m));
+    }
+  }
+}
+
+const lerp = (a, b, k) => a + (b - a) * k;
+const _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
+const wrap = (a) => { while (a > Math.PI) a -= 6.283185; while (a < -Math.PI) a += 6.283185; return a; };
+
+/* What each named gesture does to the joints, at full weight. Arm values
+   are [shoulder pitch, shoulder out, elbow] for the right arm then the
+   left (out is mirrored). k is how far through the gesture it is, 0..1,
+   for the ones that move rather than hold. */
+const GESTURES = {
+  point:  (k, t) => ({ R: [-1.45, 0.05, -0.1], head: [0.05, 0, 0] }),
+  shrug:  (k, t) => ({ R: [-0.35, 0.55, -1.35], L: [-0.35, 0.55, -1.35], head: [0, 0, 0.18], lift: 0.04 }),
+  nod:    (k, t) => ({ head: [Math.sin(k * Math.PI * 4) * 0.22, 0, 0] }),
+  shake:  (k, t) => ({ head: [0, Math.sin(k * Math.PI * 6) * 0.38, 0] }),
+  laugh:  (k, t) => ({ spine: -0.12 - Math.abs(Math.sin(t * 9)) * 0.1, head: [-0.35, 0, 0.1], jaw: 0.5,
+                       R: [-0.3, 0.2, -1.2], L: [-0.3, 0.2, -1.2] }),
+  wave:   (k, t) => ({ R: [-0.4, 2.3, -0.4 + Math.sin(t * 13) * 0.5] }),
+  fist:   (k, t) => ({ R: [-2.5 + Math.sin(t * 11) * 0.25, 0.2, -0.7], jaw: 0.35 }),
+  throw:  (k, t) => ({ R: k < 0.45 ? [0.9, 0.4, -1.6] : [-1.7, 0.1, -0.1], spine: k < 0.45 ? -0.1 : 0.15 }),
+  slam:   (k, t) => ({ R: [k < 0.4 ? -1.4 : -0.6, 0.15, k < 0.4 ? -1.0 : -0.8], L: [k < 0.4 ? -1.4 : -0.6, 0.15, k < 0.4 ? -1.0 : -0.8] }),
+  splash: (k, t) => ({ R: [-0.6 + Math.sin(t * 14) * 0.5, 0.9, -0.5], L: [-0.6 - Math.sin(t * 14) * 0.5, 0.9, -0.5], jaw: 0.45 }),
+  cross:  (k, t) => ({ R: [-0.55, -0.35, -1.95], L: [-0.55, -0.35, -1.95] }),
+  hands:  (k, t) => ({ R: [-0.7, 0.35, -1.1], L: [-0.7, 0.35, -1.1] }),        // palms out, placating
+  lean:   (k, t) => ({ spine: 0.25, head: [0.15, 0, 0] }),
+  recoil: (k, t) => ({ spine: -0.2, head: [-0.2, 0, 0], R: [-0.9, 0.3, -1.6], L: [-0.9, 0.3, -1.6] }),
+  writes: (k, t) => ({ R: [-0.75, -0.05, -1.3 + Math.sin(t * 16) * 0.08], L: [-0.6, 0.05, -1.5], head: [0.35, 0, 0] }),
+};
+
 export class NPC {
   /**
-   * @param {object} cfg {id, name, x, z, ry, skin, suit, scale, tint}
+   * @param {object} cfg {id, name, x, z, y, ry, skin, suit, scale, tint, halo, look, pose}
+   *   look: a key into LOOKS (clothes, hair, build); pose: stand | counter |
+   *   sit | bath | lectern
    */
   constructor(cfg) {
     this.cfg = cfg;
@@ -128,44 +262,203 @@ export class NPC {
     // stood your attorney up in the bath the frame after he was sat down.
     this.baseY = cfg.y ?? 0;
     this.phase = Math.random() * 6.28;
+    this.pose = cfg.pose || 'stand';
+    this.homeYaw = cfg.ry ?? 0;
+    this.turns = cfg.turns ?? (this.pose === 'stand' || this.pose === 'counter');
+
+    const L = { ...(LOOKS[cfg.look] || {}) };
+    L.hair ??= 'short';
+    this.look = L;
+    const W = L.width ?? 1;
+    this.energy = L.energy ?? 1;
 
     const g = (this.group = new THREE.Group());
     g.position.copy(this.pos);
-    g.rotation.y = cfg.ry ?? 0;
+    g.position.y = this.baseY;
+    g.rotation.y = this.homeYaw;
+    g.rotation.order = 'YXZ';
 
-    const suit = new THREE.MeshStandardMaterial({
-      color: cfg.suit ?? 0x2a2030, roughness: 0.68, metalness: 0.18,
-      emissive: cfg.suit ?? 0x2a2030, emissiveIntensity: 0.35,
-    });
-    this.suitMat = suit;
+    // ---- materials: a few per person, everything else shared
+    const std = (color, extra = {}) => new THREE.MeshStandardMaterial({
+      color, roughness: 0.7, metalness: 0.06, emissive: color, emissiveIntensity: 0.28, ...extra });
+    const skinCol = cfg.skin ?? 0xc79a76;
+    const skin = std(skinCol, { roughness: 0.72, emissiveIntensity: 0.2 });
+    const jacketCol = L.jacket === null ? null : (L.jacket ?? cfg.suit ?? 0x2a2030);
+    const jacket = std(jacketCol ?? cfg.suit ?? 0x2a2030, { metalness: 0.15 });
+    const shirt = L.shirt === 'loud' ? std(0xffffff, { map: loudShirt(), emissiveIntensity: 0.18, emissiveMap: loudShirt() })
+      : L.shirt === 'skin' ? skin
+        : std(L.shirt ?? 0xe8e2d4);
+    const trousers = std(L.trousers ?? (jacketCol != null ? new THREE.Color(jacketCol).multiplyScalar(0.8).getHex() : 0x2a2a30));
+    const hair = std(L.hairCol ?? 0x2a1a10, { roughness: 0.9, emissiveIntensity: 0.12 });
+    this.suitMat = jacket;
+    // what the chest and arms are made of: the jacket, or the shirt when
+    // there is no jacket, and his own skin in the bath
+    const top = jacketCol == null ? shirt : jacket;
+    const sleeve = L.shirt === 'skin' ? skin : top;
 
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.29, 0.62, 6, 14), suit);
-    torso.position.y = 1.16;
-    g.add(torso);
-    this.torso = torso;
+    const mesh = (gm, m, x, y, z, parent) => { const o = new THREE.Mesh(gm, m); o.position.set(x, y, z); parent.add(o); return o; };
 
-    const hips = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.5, 6, 12), suit);
-    hips.position.y = 0.52;
-    g.add(hips);
+    // ---- the skeleton
+    const HIP = 0.92;
+    const pelvis = (this.pelvis = new THREE.Group());
+    pelvis.position.y = HIP;
+    g.add(pelvis);
+    mesh(cap(0.15 * W, 0.1, 3, 10), trousers, 0, 0.02, 0, pelvis).scale.set(1.05, 1, 0.78);
+    if (L.belt) mesh(cyl(0.16 * W, 0.16 * W, 0.05, 12), DARK, 0, 0.1, 0, pelvis).scale.z = 0.8;
+    // a skirt hides the thighs: a short flared tube from the waist
+    if (L.skirt) mesh(cyl(0.16 * W, 0.24 * W, 0.46, 12), L.apron ? jacket : trousers, 0, -0.17, 0, pelvis).scale.z = 0.85;
 
-    const armGeo = new THREE.CapsuleGeometry(0.09, 0.52, 4, 8);
-    this.arms = [-1, 1].map((s) => {
-      const a = new THREE.Mesh(armGeo, suit);
-      a.position.set(s * 0.36, 1.13, 0);
-      a.rotation.z = s * 0.12;
-      g.add(a);
-      return a;
-    });
+    const spine = (this.spine = new THREE.Group());
+    spine.position.y = 0.08;
+    pelvis.add(spine);
+    const chestR = 0.165 * W;
+    const chest = mesh(cap(chestR, 0.26, 3, 12), top, 0, 0.24, 0, spine);
+    chest.scale.set(1.12, 1, 0.74 * (L.belly ? 1.05 : 1));
+    chest.userData.keep = true;           // it breathes
+    this.chest = chest;
+    if (L.belly) mesh(sph(0.15 * W, 12, 10), top, 0, 0.13, 0.035, spine).scale.set(1.0, 0.95, 0.85 * L.belly);
+    // the shoulders: a bar across the top, so the arms hang from a frame
+    mesh(cap(0.07, 0.26 * W, 2, 8), top, 0, 0.43, 0, spine).rotation.z = Math.PI / 2;
+    const front = chestR * 0.74 + 0.004;
+    // a V: the jacket open on the shirt, or the shirt open on the chest
+    const vee = geo('vee', () => new THREE.CircleGeometry(0.075, 3).rotateZ(-Math.PI / 2).scale(1, 2.2, 1));
+    if (jacketCol != null && L.shirt !== null) {
+      // lapels open on a shirt, and a tie in it
+      mesh(vee, shirt, 0, 0.36, front, spine);
+      if (L.tie === 'bow') mesh(box(0.08, 0.03, 0.02), DARK, 0, 0.45, front + 0.008, spine);
+      else if (L.tie !== null && L.tie !== undefined) mesh(box(0.03, 0.2, 0.012), std(L.tie), 0, 0.33, front + 0.006, spine);
+    }
+    if (L.vest) {
+      mesh(box(0.26 * W, 0.3, 0.012), std(L.vest), 0, 0.26, front + 0.002, spine);
+      mesh(box(0.08, 0.3, 0.014), shirt, 0, 0.29, front + 0.004, spine);
+      if (L.tie === 'bow') mesh(box(0.08, 0.03, 0.02), DARK, 0, 0.45, front + 0.012, spine);
+    }
+    if (L.open) {
+      // unbuttoned to the sternum, with a medallion in it
+      mesh(vee, skin, 0, 0.38, front + 0.002, spine).scale.set(0.8, 0.8, 1);
+    }
+    if (L.chain) mesh(geo('chain', () => new THREE.TorusGeometry(0.07, 0.006, 4, 16, Math.PI)), GOLD, 0, 0.44, front + 0.01, spine).rotation.z = Math.PI;
+    if (L.apron) mesh(box(0.24 * W, 0.62, 0.012), std(0xf4f0e8), 0, 0.02, front + 0.01, spine);
+    if (L.belt) mesh(box(0.05, 0.05, 0.02), GOLD, 0, 0.02, front + 0.012, spine);
 
+    // ---- neck and head
+    const neck = (this.neck = new THREE.Group());
+    neck.position.y = 0.5;
+    spine.add(neck);
+    mesh(cyl(0.05, 0.056, 0.12, 8), skin, 0, 0.03, 0, neck);
+    if (L.open === undefined && L.shirt !== 'skin' && L.shirt !== null) {
+      mesh(cyl(0.062, 0.066, 0.05, 10), shirt, 0, -0.01, 0, neck);         // the collar
+    }
     this.headPivot = new THREE.Group();
-    this.headPivot.position.y = 1.72;
-    g.add(this.headPivot);
+    this.headPivot.position.y = 0.1;
+    neck.add(this.headPivot);
+    const human = (this.human = new THREE.Group());
+    this.headPivot.add(human);
+    mesh(sph(0.115, 16, 12), skin, 0, 0.1, 0, human).scale.set(0.94, 1.12, 1.02);        // skull
+    mesh(sph(0.09, 12, 8), skin, 0, 0.035, 0.022, human).scale.set(0.95, 0.85, 1.0);    // jaw and cheeks
+    [-1, 1].forEach((s) => mesh(sph(0.03, 6, 5), skin, s * 0.108, 0.09, -0.005, human).scale.set(0.5, 1, 0.8));
+    // eyes, which blink
+    this.eyes = [-1, 1].map((s) => {
+      const e = new THREE.Group();
+      e.position.set(s * 0.042, 0.115, 0.098);
+      human.add(e);
+      mesh(sph(0.018, 8, 6), EYE_WHITE, 0, 0, 0, e);
+      mesh(sph(0.009, 6, 5), DARK, 0, 0, 0.014, e);
+      return e;
+    });
+    this.brows = [-1, 1].map((s) => {
+      const b = mesh(box(0.05, 0.012, 0.014), hair, s * 0.045, 0.152, 0.108, human);
+      b.userData.keep = true;             // they go up when a point is being made
+      return b;
+    });
+    mesh(cap(0.017, 0.035, 2, 6), skin, 0, 0.085, 0.118, human).rotation.x = 0.35;        // nose
+    mesh(box(0.05, 0.01, 0.012), LIP, 0, 0.048, 0.108, human);                           // upper lip
+    this.jaw = new THREE.Group();
+    this.jaw.position.set(0, 0.06, 0.02);
+    human.add(this.jaw);
+    mesh(box(0.046, 0.011, 0.012), LIP, 0, -0.024, 0.086, this.jaw);                    // lower lip
+    this.mouthIn = mesh(box(0.04, 0.03, 0.006), DARK, 0, 0.034, 0.104, human);           // inside, when open
+    this.mouthIn.scale.y = 0.05;
+    this.mouthIn.userData.keep = true;
+    if (L.stache) mesh(box(0.08, 0.02, 0.022), hair, 0, 0.062, 0.114, human);
+    // hair
+    const capGeo = geo('haircap', () => new THREE.SphereGeometry(0.123, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52));
+    const fringeGeo = geo('fringe', () => new THREE.SphereGeometry(0.121, 16, 6, 0, Math.PI * 2, Math.PI * 0.4, Math.PI * 0.18));
+    const hairAt = (gm, y = 0.108, z = -0.012) => { const o = mesh(gm, hair, 0, y, z, human); o.scale.set(0.97, 1.1, 1.06); return o; };
+    if (L.hair === 'short' || L.hair === 'bun' || L.hair === 'long' || L.hair === 'curly') hairAt(capGeo);
+    if (L.hair === 'bald') { const f = hairAt(fringeGeo, 0.1, -0.015); f.rotation.x = -0.25; }
+    if (L.hair === 'bun') mesh(sph(0.055, 10, 8), hair, 0, 0.19, -0.1, human);
+    if (L.hair === 'long') mesh(box(0.2, 0.26, 0.06), hair, 0, -0.02, -0.08, human);
+    if (L.hair === 'curly') {
+      // a mop: a ring of curls round the crown and one round the back and
+      // sides, leaving the face clear
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        if (Math.cos(a) > 0.55) continue;                   // not over the forehead
+        mesh(sph(0.042, 7, 5), hair, Math.sin(a) * 0.112, 0.15, Math.cos(a) * 0.105 - 0.01, human);
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        mesh(sph(0.04, 7, 5), hair, Math.sin(a) * 0.065, 0.205, Math.cos(a) * 0.06 - 0.02, human);
+      }
+    }
+    if (L.hat === 'cap' || L.hat === 'patrol') {
+      const hm = std(L.hatCol ?? 0x222222);
+      mesh(cyl(0.125, 0.128, 0.07, 14), hm, 0, 0.215, -0.005, human);
+      if (L.hat === 'patrol') mesh(cyl(0.14, 0.13, 0.03, 14), hm, 0, 0.26, -0.01, human);
+      mesh(box(0.2, 0.012, 0.09), DARK, 0, 0.19, 0.11, human).rotation.x = 0.15;       // the peak
+      if (L.hat === 'patrol') mesh(box(0.05, 0.04, 0.01), GOLD, 0, 0.225, 0.126, human);
+    }
+    if (L.hat === 'maid') mesh(box(0.16, 0.05, 0.1), std(0xf4f0e8), 0, 0.225, -0.02, human).rotation.x = -0.3;
+    if (L.glasses) {
+      const rim = geo('rim', () => new THREE.TorusGeometry(0.026, 0.005, 4, 12));
+      [-1, 1].forEach((s) => mesh(rim, DARK, s * 0.043, 0.115, 0.118, human));
+      mesh(box(0.03, 0.005, 0.005), DARK, 0, 0.12, 0.12, human);
+    }
+    if (L.shades) {
+      [-1, 1].forEach((s) => mesh(box(0.05, 0.032, 0.01), DARK, s * 0.043, 0.115, 0.12, human));
+      mesh(box(0.13, 0.008, 0.008), DARK, 0, 0.128, 0.12, human);
+    }
 
-    this.human = makeHumanHead(cfg.skin ?? 0xc79a76);
     this.lizard = makeLizardHead();
     this.lizard.visible = false;
     this.lizard.scale.setScalar(0.01);
-    this.headPivot.add(this.human, this.lizard);
+    this.lizard.position.y = 0.1;
+    this.headPivot.add(this.lizard);
+
+    // ---- arms: shoulder -> upper arm -> elbow -> forearm -> hand
+    this.arms = [-1, 1].map((s) => {
+      const sh = new THREE.Group();
+      sh.position.set(s * 0.2 * W, 0.43, 0);
+      spine.add(sh);
+      mesh(cap(0.056, 0.19, 2, 8), sleeve, 0, -0.14, 0, sh);
+      const el = new THREE.Group();
+      el.position.y = -0.29;
+      sh.add(el);
+      mesh(cap(0.048, 0.18, 2, 8), sleeve, 0, -0.13, 0, el);
+      if (sleeve !== skin && L.shirt !== null && L.shirt !== 'loud') mesh(cyl(0.05, 0.05, 0.03, 8), shirt, 0, -0.245, 0, el);
+      const hand = new THREE.Group();
+      hand.position.y = -0.27;
+      el.add(hand);
+      mesh(sph(0.045, 8, 6), skin, 0, -0.04, 0.005, hand).scale.set(0.75, 1.15, 0.5);
+      return { sh, el, hand, s, cur: [0, 0.1, -0.15] };
+    });
+    // ---- legs: hip -> thigh -> knee -> shin -> ankle -> shoe
+    this.legs = [-1, 1].map((s) => {
+      const hp = new THREE.Group();
+      hp.position.set(s * 0.09 * W, 0, 0);
+      pelvis.add(hp);
+      mesh(cap(0.072 * Math.sqrt(W), 0.3, 2, 8), trousers, 0, -0.21, 0, hp);
+      const kn = new THREE.Group();
+      kn.position.y = -0.43;
+      hp.add(kn);
+      mesh(cap(0.058, 0.32, 2, 8), L.skirt ? skin : trousers, 0, -0.21, 0, kn);
+      const an = new THREE.Group();
+      an.position.y = -0.43;
+      kn.add(an);
+      mesh(box(0.09, 0.065, 0.24), SHOE, 0, -0.03, 0.045, an);
+      return { hp, kn, an, s };
+    });
 
     // The halo behind the head. It was a real point light, and every point
     // light is paid for by every lit pixel on screen, every frame, whether
@@ -176,8 +469,8 @@ export class NPC {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: haloTexture(), color: cfg.tint ?? 0xffb400, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
-    glow.position.set(0, 1.78, -0.35);
-    glow.scale.set(1.5, 1.9, 1);
+    glow.position.set(0, 1.62, -0.3);
+    glow.scale.set(1.1, 1.4, 1);
     glow.visible = cfg.halo !== 0;
     g.add(glow);
     this.halo = {
@@ -199,9 +492,30 @@ export class NPC {
     this.ring = ring;
 
     if (cfg.scale) g.scale.setScalar(cfg.scale);
+    mergeParts(g);
 
     this.morph = 0;
     this.active = true;
+
+    // ---- what they are doing
+    this.speaking = false;     // set every frame by whoever runs the dialogue
+    this.listening = false;
+    this.lookTarget = null;    // a world point to look at instead of you
+    this.talk = 0;             // eased 0..1
+    this.gest = null;          // { name, t, dur }
+    this.walkPh = 0;
+    this.speed = 0;
+    this.moving = false;
+    this._lx = g.position.x; this._lz = g.position.z; this._lt = null;
+    this.blinkIn = 1 + Math.random() * 3;
+    this.beatIn = 0;
+    this.beat = [[-0.3, 0.2, -0.6], [-0.3, 0.2, -0.6]];
+    this._wp = new THREE.Vector3();
+  }
+
+  /** a one-off movement: see GESTURES */
+  gesture(name, dur = 1.6) {
+    if (GESTURES[name]) this.gest = { name, t: 0, dur };
   }
 
   /** 0..1 how much of the reptile is showing */
@@ -210,51 +524,169 @@ export class NPC {
     const showLiz = m > 0.03;
     this.lizard.visible = showLiz;
     this.human.visible = m < 0.97;
-    this.lizard.scale.setScalar(Math.max(0.01, m));
+    this.lizard.scale.setScalar(Math.max(0.01, m) * 0.5);
     this.human.scale.setScalar(Math.max(0.01, 1 - m * 0.85));
   }
 
   update(t, s, playerPos, nearest) {
     const g = this.group;
+    const dt = this._lt == null ? 0 : Math.min(0.1, Math.max(0, t - this._lt));
+    this._lt = t;
     const ph = t + this.phase;
+    const E = this.energy;
 
-    // idle: weight shift + breath
-    g.position.y = this.baseY + Math.sin(ph * 1.1) * 0.022;
-    this.torso.scale.y = 1 + Math.sin(ph * 1.6) * 0.022;
-    this.arms[0].rotation.x = Math.sin(ph * 0.9) * 0.18;
-    this.arms[1].rotation.x = Math.sin(ph * 0.9 + 1.4) * 0.18;
+    // ---- are they going anywhere: read it off where they actually are
+    const mx = g.position.x - this._lx, mz = g.position.z - this._lz;
+    this._lx = g.position.x; this._lz = g.position.z;
+    const step = Math.hypot(mx, mz);
+    const v = dt > 0 ? step / dt : 0;
+    this.speed += (Math.min(v, 4) - this.speed) * Math.min(1, dt * 8);
+    this.moving = this.speed > 0.25 && step < 1.5;      // a teleport is not a stride
+    if (this.moving) this.walkPh += step * (Math.PI * 2 / 1.35);
+    const walk = Math.min(1, this.speed / 1.2);
 
-    // they track you: the head first, then the shoulders follow
-    // once you are close enough to be a problem
-    const dx = playerPos.x - g.position.x;
-    const dz = playerPos.z - g.position.z;
+    // ---- which way they face
+    const look = this.lookTarget || playerPos;
+    g.getWorldPosition(this._wp);
+    const dx = look.x - this._wp.x, dz = look.z - this._wp.z;
     const dist = Math.hypot(dx, dz);
-    const want = Math.atan2(dx, dz);
-    const base = this.cfg.ry ?? 0;
-    let d = want - base;
-    while (d > Math.PI) d -= 6.283;
-    while (d < -Math.PI) d += 6.283;
+    // (parent-relative: a person riding in a car faces the way the car does)
+    let pYaw = 0;
+    if (g.parent && g.parent.type !== 'Scene') {
+      g.parent.getWorldQuaternion(_pq);
+      pYaw = _pe.setFromQuaternion(_pq, 'YXZ').y;
+    }
+    const want = Math.atan2(dx, dz) - pYaw;
+    if (this.moving && step > 0.0005) {
+      const head = Math.atan2(mx, mz);
+      g.rotation.y += wrap(head - g.rotation.y) * Math.min(1, dt * 7);
+    } else if (this.turns) {
+      // they turn to you once you are close enough to be a problem
+      const engage = 1 - Math.min(1, Math.max(0, (dist - 3.0) / 3.5));
+      const d = wrap(want - this.homeYaw);
+      const bodyWant = this.homeYaw + d * 0.85 * (this.speaking || this.listening ? 1 : engage);
+      g.rotation.y += wrap(bodyWant - g.rotation.y) * Math.min(1, dt * 3);
+    }
+    let hd = wrap(want - g.rotation.y);
+    hd = Math.max(-1.3, Math.min(1.3, hd));
+    if (this.moving) hd *= 0.3;
 
-    const engage = 1 - Math.min(1, Math.max(0, (dist - 3.0) / 3.5));
-    const bodyWant = base + d * 0.85 * engage;
-    g.rotation.y += (bodyWant - g.rotation.y) * 0.05;
+    // ---- talking, eased in and out
+    this.talk += ((this.speaking ? 1 : 0) - this.talk) * Math.min(1, dt * 6);
+    const talk = this.talk;
+    // every half second or so the hands go somewhere new
+    this.beatIn -= dt;
+    if (this.beatIn <= 0) {
+      this.beatIn = 0.45 + Math.random() * 0.5;
+      const r = () => Math.random();
+      this.beat = [
+        [-0.25 - r() * 0.75 * E, 0.12 + r() * 0.35, -0.5 - r() * 1.0],
+        r() < 0.55 ? [-0.2 - r() * 0.55 * E, 0.1 + r() * 0.3, -0.4 - r() * 0.9] : [0.02, 0.1, -0.2],
+      ];
+    }
 
-    let hd = want - g.rotation.y;
-    while (hd > Math.PI) hd -= 6.283;
-    while (hd < -Math.PI) hd += 6.283;
-    hd = Math.max(-1.4, Math.min(1.4, hd));
-    this.headPivot.rotation.y += (hd - this.headPivot.rotation.y) * 0.07;
+    // ---- the gesture, if one is running
+    let G = null, gw = 0;
+    if (this.gest) {
+      const q = this.gest;
+      q.t += dt;
+      const k = q.t / q.dur;
+      if (k >= 1) this.gest = null;
+      else {
+        gw = Math.min(1, q.t / 0.22, (q.dur - q.t) / 0.3);
+        G = GESTURES[q.name](k, t);
+      }
+    }
 
-    // the reveal
+    // ---- the body
+    const pose = this.pose;
+    const sit = pose === 'sit', bath = pose === 'bath';
+    const breathe = Math.sin(ph * 1.5) * 0.012;
+    const stride = Math.sin(this.walkPh);
+    this.pelvis.position.y = sit ? (this.cfg.seatY ?? 0.5) : bath ? 0.92
+      : 0.92 + Math.abs(Math.cos(this.walkPh)) * 0.035 * walk + breathe * 0.3;
+    this.pelvis.rotation.z = (sit || bath) ? 0 : Math.sin(ph * 0.45) * 0.025 * (1 - walk) + stride * 0.03 * walk;
+    this.pelvis.rotation.y = stride * 0.1 * walk;
+    let spineX = (pose === 'counter' || pose === 'lectern') ? 0.12 : sit ? 0.05 : bath ? -0.45 : 0.03;
+    spineX += walk * 0.05 + talk * Math.sin(ph * 2.3) * 0.03 * E;
+    if (G?.spine) spineX += G.spine * gw;
+    this.spine.rotation.x = lerp(this.spine.rotation.x, spineX, Math.min(1, dt * 8));
+    this.spine.rotation.y = -stride * 0.12 * walk + talk * Math.sin(ph * 1.3) * 0.08 * E;
+    this.spine.position.y = 0.08 + (G?.lift ? G.lift * gw : 0);
+    this.chest.scale.y = 1 + breathe * 1.6;
+
+    // ---- legs
+    for (const Lg of this.legs) {
+      let hip, knee, out = -Lg.s * 0.03;
+      if (sit) { hip = -1.5; knee = 1.45; out = -Lg.s * 0.1; }
+      else if (bath) { hip = -1.3; knee = 0.5; }
+      else {
+        const p = this.walkPh + (Lg.s > 0 ? Math.PI : 0);
+        // idle: the weight on one leg, the other knee a little soft
+        const rest = Lg.s * Math.sin(ph * 0.45) > 0 ? 0.1 : 0.02;
+        hip = lerp(0, -Math.sin(p) * 0.45, walk);
+        knee = lerp(rest, Math.max(0, Math.sin(p + 1.3)) * 0.85 + 0.08, walk);
+      }
+      Lg.hp.rotation.x = lerp(Lg.hp.rotation.x, hip, Math.min(1, dt * 12));
+      Lg.hp.rotation.z = out;
+      Lg.kn.rotation.x = lerp(Lg.kn.rotation.x, knee, Math.min(1, dt * 12));
+      Lg.an.rotation.x = -(Lg.hp.rotation.x + Lg.kn.rotation.x) * 0.8;
+    }
+
+    // ---- arms: the pose, then the hands while talking, then any gesture
+    this.arms.forEach((A, i) => {
+      const right = A.s > 0;
+      let base;
+      if (pose === 'counter' || pose === 'lectern') base = [-0.6, 0.12, -0.9];
+      else if (sit) base = [-0.45, 0.1, -0.9];
+      else if (bath) base = [0.3, 0.95, -0.95];           // along the rim of the tub
+      else base = [Math.sin(ph * 0.9 + i) * 0.04, 0.1, -0.18];
+      if (this.moving) base = [stride * A.s * 0.5 * walk, 0.1, -0.35];
+      const b = this.beat[right ? 0 : 1];
+      const tk = talk * (pose === 'counter' || bath ? 0.6 : 1) * (this.moving ? 0.3 : 1);
+      let tgt = [lerp(base[0], b[0], tk), lerp(base[1], b[1], tk), lerp(base[2], b[2], tk)];
+      if (G) {
+        const gv = right ? G.R : G.L;
+        if (gv) tgt = [lerp(tgt[0], gv[0], gw), lerp(tgt[1], gv[1], gw), lerp(tgt[2], gv[2], gw)];
+      }
+      const k = Math.min(1, dt * (G ? 10 : 6));
+      A.cur[0] = lerp(A.cur[0], tgt[0], k);
+      A.cur[1] = lerp(A.cur[1], tgt[1], k);
+      A.cur[2] = lerp(A.cur[2], tgt[2], k);
+      A.sh.rotation.x = A.cur[0];
+      A.sh.rotation.z = A.s * A.cur[1];
+      A.el.rotation.x = A.cur[2];
+      A.hand.rotation.x = talk * Math.sin(ph * 4 + i) * 0.3;
+    });
+
+    // ---- the head: at you, nodding along when talking or being talked at
+    let hx = talk * Math.sin(ph * 5.1) * 0.06 * E + (this.listening ? Math.max(0, Math.sin(ph * 1.7)) * 0.08 : 0);
+    let hy = hd, hz = talk * Math.sin(ph * 2.2) * 0.05;
+    if (bath) hx += 0.35;                // lying back, but looking at you
+    if (G?.head) { hx += G.head[0] * gw; hy += G.head[1] * gw; hz += G.head[2] * gw; }
+    const hk = Math.min(1, dt * 5);
+    this.headPivot.rotation.x = lerp(this.headPivot.rotation.x, hx, hk);
+    this.headPivot.rotation.y = lerp(this.headPivot.rotation.y, hy, hk);
+    this.headPivot.rotation.z = lerp(this.headPivot.rotation.z, hz, hk);
+
+    // ---- the face: the mouth works while they talk, the eyes blink
+    let open = talk * Math.max(0, Math.sin(t * 13 + Math.sin(t * 4.7) * 2)) * 0.3;
+    if (G?.jaw) open = Math.max(open, G.jaw * gw);
+    this.jaw.rotation.x = open;
+    this.mouthIn.scale.y = 0.05 + open * 3;
+    this.blinkIn -= dt;
+    let lid = 1;
+    if (this.blinkIn < 0) { lid = 0.1; if (this.blinkIn < -0.12) this.blinkIn = 2 + Math.random() * 4; }
+    this.eyes.forEach((e) => { e.scale.y = lid; });
+    const browUp = talk * Math.max(0, Math.sin(ph * 2.6)) * 0.012 * E;
+    this.brows.forEach((b) => { b.position.y = 0.152 + browUp; });
+
+    // ---- the reveal
     const reveal = Math.min(1, s.perception * 1.25 + s.monster * 0.9 - 0.18);
     this.setMorph(Math.max(0, reveal));
-
     if (this.morph > 0.2) {
       const jaw = this.lizard.userData.jaw;
-      if (jaw) jaw.rotation.x = Math.abs(Math.sin(ph * 2.3)) * 0.4 * this.morph;
-      this.headPivot.rotation.z = Math.sin(ph * 3.1) * 0.06 * this.morph;
-    } else {
-      this.headPivot.rotation.z *= 0.9;
+      if (jaw) jaw.rotation.x = Math.abs(Math.sin(ph * 2.3)) * 0.4 * this.morph + open;
     }
 
     // hostility colour as loathing rises
@@ -463,6 +895,7 @@ const SUIT_COLS = [
   0x3f6b52, 0x9a7340, 0x8f4a63, 0x4a6b6b, 0xa8864a,
 ];
 const SKIN_COLS = [0xe8c0a0, 0xc08a60, 0x9a7050, 0xd6a882, 0x7e5238];
+const HAIR_COLS = [0x1a120c, 0x3a2412, 0x6a4422, 0xb89060, 0x8a8278, 0x2a1a10, 0xd8d4cc, 0x4a3018];
 
 const UP = new THREE.Vector3(0, 1, 0);
 const ONE = new THREE.Vector3(1, 1, 1);
@@ -492,6 +925,7 @@ export class Crowd {
       speed: 0.7 + Math.random() * 0.6,
       build: 0.92 + Math.random() * 0.18,
       yaw: s.ry ?? 0,
+      bald: Math.random() < 0.12,
     }));
     const n = (this.n = this.specs.length);
 
@@ -528,6 +962,11 @@ export class Crowd {
     this.foreArm = inst(new THREE.CapsuleGeometry(0.05, P.foreArm * 0.7, 1, 5), skinMat, n * 2);
     this.thigh = inst(new THREE.CapsuleGeometry(0.088, P.thigh * 0.6, 1, 6), legMat, n * 2);
     this.shin = inst(new THREE.CapsuleGeometry(0.072, P.shin * 0.6, 1, 6), legMat, n * 2);
+    // hair and shoes: without them they were shop-window mannequins
+    const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.9, emissive: 0x100c0a });
+    this.hair = inst(new THREE.SphereGeometry(P.headR * 1.07, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat, n);
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x1a1412, roughness: 0.5, emissive: 0x0a0808 });
+    this.shoe = inst(new THREE.BoxGeometry(0.09, 0.06, 0.22), shoeMat, n * 2);
 
     const c = new THREE.Color();
     this.specs.forEach((s, i) => {
@@ -535,6 +974,7 @@ export class Crowd {
       const skin = SKIN_COLS[(i * 3) % SKIN_COLS.length];
       const leg = new THREE.Color(suit).multiplyScalar(0.7).getHex();
       this.head.setColorAt(i, c.setHex(skin));
+      this.hair.setColorAt(i, c.setHex(HAIR_COLS[(i * 5 + 1) % HAIR_COLS.length]));
       this.neck.setColorAt(i, c.setHex(skin));
       this.torso.setColorAt(i, c.setHex(suit));
       for (let k = 0; k < 2; k++) {
@@ -660,6 +1100,12 @@ export class Crowd {
       p.set(e.x + this._ox, headY, e.z + this._oz);
       m.compose(p, q, sc);
       this.head.setMatrixAt(i, m);
+      // the hair sits on the head, and does not stretch into a snout
+      sc.setScalar(e.bald ? 0 : B);
+      this._off(0, (sit ? 0.05 : 0.02) - 0.012, yaw);
+      p.set(e.x + this._ox, headY + 0.018 * B, e.z + this._oz);
+      m.compose(p, q, sc);
+      this.hair.setMatrixAt(i, m);
 
       // ---- arms ------------------------------------------------
       for (let k = 0; k < 2; k++) {
@@ -709,8 +1155,14 @@ export class Crowd {
         const kx = jx + d.x * P.thigh * B;
         const ky = hipY + d.y * P.thigh * B;
         const kz = jz + d.z * P.thigh * B;
-        this._seg(this.shin, i * 2 + k,
+        const sd = this._seg(this.shin, i * 2 + k,
           kx, ky, kz, pitch + knee, 0, yaw, P.shin * B);
+        // a shoe at the end of it, flat, pointing the way they face
+        this._off(0, 0.05, yaw);
+        p.set(kx + sd.x * P.shin * B + this._ox, ky + sd.y * P.shin * B - 0.03, kz + sd.z * P.shin * B + this._oz);
+        q.setFromAxisAngle(UP, yaw);
+        m.compose(p, q, ONE);
+        this.shoe.setMatrixAt(i * 2 + k, m);
       }
 
       const dx = e.x - playerPos.x, dz = e.z - playerPos.z;
@@ -718,7 +1170,7 @@ export class Crowd {
       if (near > nearest) nearest = near;
     }
 
-    [this.head, this.neck, this.torso, this.upperArm, this.foreArm, this.thigh, this.shin]
+    [this.head, this.hair, this.neck, this.torso, this.upperArm, this.foreArm, this.thigh, this.shin, this.shoe]
       .forEach((o) => { o.instanceMatrix.needsUpdate = true; });
     this.nearest = nearest;
   }
