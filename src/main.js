@@ -12,7 +12,7 @@ import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js
 import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
-import { touch, initTouch, askForMotion, sampleTouch } from './touch.js';
+import { touch, initTouch, askForMotion, sampleTouch, stopMoving } from './touch.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -1564,7 +1564,7 @@ function leaveCar() {
 const phone = { walk: 0, strafe: 0, run: false };
 let phoneDriving = false;
 const tiltEl = document.getElementById('tilt'), tiltDot = document.querySelector('#tilt i');
-const tiltRead = document.getElementById('tilt-read');
+const tiltRead = document.getElementById('tilt-read'), goEl = document.getElementById('go');
 function phoneInput(dt) {
   if (!touch.on) return;
   const t = sampleTouch(dt);
@@ -1577,11 +1577,19 @@ function phoneInput(dt) {
     player.lookLag.x += t.dragX * 0.005;
     player.lookLag.y += t.dragY * 0.004;
   }
-  // hands full of a conversation: tapping an answer is not an order to walk
-  const still = !!game.dlg || driving;
+  // A conversation, a cut to black, a chair or the car all stop you where
+  // you stand: nobody wants to come out of a fade already walking.
+  const still = !!game.dlg || driving || !!fade || !!winning || game._blacking > 0
+    || seminar.seated || game.over;
+  if (still) stopMoving();
   phone.walk = still ? 0 : t.walk;
   phone.strafe = still ? 0 : t.strafe;
   phone.run = !still && t.run;
+  if (goEl) {
+    const arrows = (t.walk > 0 ? (t.run ? '▲▲' : '▲') : t.walk < 0 ? '▼' : '')
+      + (t.strafe < 0 ? '◀' : t.strafe > 0 ? '▶' : '');
+    if (goEl.textContent !== arrows) goEl.textContent = arrows;
+  }
   if (tiltDot) {
     tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
     tiltEl.style.transform = `rotate(${(-t.wheel).toFixed(1)}deg)`;
@@ -2564,7 +2572,7 @@ document.getElementById('start').addEventListener('click', () => {
     'Somewhere around the edge of the carpet the drugs began to take hold.'), 900);
   if (touch.on) setTimeout(() => game.say(touch.denied
     ? 'No motion access, so drag to look. To tilt and walk, close this tab, open the game again and tap Allow.'
-    : 'Tilt away to walk, tilt left or right to look round, turn it like a wheel to step sideways. Two fingers to level.',
+    : 'Flick it away to walk and back once to stop. Tilt left or right to look. Flick it round like a wheel to shuffle sideways.',
   null, 7), 5600);
 });
 
