@@ -425,6 +425,43 @@ export class Post {
     this.renderer.setRenderTarget(null);
   }
 
+  /* Where a point of the 3D frame ends up on screen once the final pass has
+     moved it. That pass does not move pixels, it chooses where each one
+     reads FROM, so this runs the same sums forwards and walks back to the
+     point that reads from here. Only the steady parts are mirrored: the
+     head hanging, the sway, the breathing and the bulge. The noise crawl,
+     the jitter and the kaleidoscope fold are left out; they wander round
+     the true spot and never carry it off. x and y are 0..1 from top left. */
+  toScreen(x, y) {
+    const u = this.mFinal.uniforms, aspect = u.uAspect.value, t = u.uTime.value;
+    const fearFx = Math.max(0, (u.uFear.value - 0.22) * 1.282);
+    const blur = u.uBlur.value, rush = u.uRush.value, monster = u.uMonster.value;
+    const scale = 1 + (Math.sin(t * 1.15) * 0.5) * (0.14 * u.uPsych.value + 0.16 * monster)
+      - u.uPulse.value * (0.075 * rush + 0.045 * fearFx);
+    const k = 0.16 * rush + 0.14 * monster - 0.14 * fearFx + 0.10 * blur;
+    const dx = Math.sin(t * 0.90) * 0.028 * blur;
+    const dy = Math.sin(t * 0.62) * 0.6 * 0.028 * blur + 0.020 * u.uDim.value;
+    // screen point (y down) -> the shader's centred, aspect-true space (y up)
+    const px = (x - 0.5) * aspect, py = 0.5 - y;
+    let qx = px, qy = py;
+    // Newton's method: the sums are smooth and near enough the identity
+    // that a few steps land within a hundredth of a pixel
+    for (let i = 0; i < 6; i++) {
+      const r2 = qx * qx + qy * qy, b = scale * (1 + k * r2);
+      const ax = qx + dx, ay = qy + dy;
+      const ex = ax * b - px, ey = ay * b - py;
+      // the Jacobian of (q + d) * scale * (1 + k|q|^2)
+      const g = 2 * scale * k;
+      const j11 = b + g * ax * qx, j12 = g * ax * qy;
+      const j21 = g * ay * qx, j22 = b + g * ay * qy;
+      const det = j11 * j22 - j12 * j21;
+      if (Math.abs(det) < 1e-9) break;
+      qx -= (j22 * ex - j12 * ey) / det;
+      qy -= (j11 * ey - j21 * ex) / det;
+    }
+    return [qx / aspect + 0.5, 0.5 - qy];
+  }
+
   _blit(mat, target) {
     this.quad.material = mat;
     this.renderer.setRenderTarget(target);
