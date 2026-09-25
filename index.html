@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- added to the Home Screen it opens full screen, with no Safari bars -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Loathing" />
 <title>Fear &amp; Loathing</title>
 <link rel="stylesheet" href="css/ui.css" />
 <script type="importmap">
@@ -52,7 +57,14 @@
   <div id="prompt" class="hidden"></div>
   <div id="subtitle" class="hidden"></div>
   <div id="toast-stack"></div>
+
+  <!-- the phone only: the case behind a button, a level, and the pedals -->
+  <div id="case-btn">CASE</div>
+  <div id="tilt"><i></i></div>
+  <div id="pedals"><span>BRAKE</span><span>GAS</span></div>
 </div>
+
+<div id="turn-phone">Turn the phone sideways.<small>If it will not turn, switch off Portrait Orientation Lock in Control Centre.</small></div>
 
 <!-- ============ DIALOGUE ============ -->
 <div id="dialogue" class="hidden">
@@ -127,6 +139,15 @@
       <div><b>1</b>&ndash;<b>4</b> answer, in conversation</div>
       <div><b>TAB</b> itinerary</div>
       <div><b>W</b> <b>A</b> <b>D</b> <b>S</b> drive &middot; steer &middot; brake</div>
+    </div>
+    <div class="controls-touch">
+      <div>Hold it sideways, the way you are holding it now.</div>
+      <div><b>TILT AWAY</b> walk &middot; <b>TOWARD</b> back up</div>
+      <div><b>TIP LEFT / RIGHT</b> step sideways</div>
+      <div><b>TURN YOURSELF</b> look round &middot; <b>DRAG</b> look</div>
+      <div><b>TAP</b> interact &middot; answer &middot; <b>CASE</b> take a dose</div>
+      <div><b>TWO FINGERS</b> level it again</div>
+      <div><b>IN THE CAR</b> tip it like a wheel &middot; right thumb gas &middot; left brake</div>
     </div>
 
     <button id="start">BEGIN THE DRIVE</button>
