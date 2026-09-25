@@ -570,7 +570,7 @@ const ghosts = [
   new Hallucination(...onRing(15, 2.6), 0.55),
   new Hallucination(...onRing(11, 4.4), 0.9),
   new Hallucination(-6, -40, 0.3),
-  new Hallucination(...onRing(16, 5.6), 0.12),
+  new Hallucination(...onRing(16, 5.75), 0.12),   // in an aisle, clear of the banks
 ];
 ghosts.forEach((g) => scene.add(g.group));
 
