@@ -39,7 +39,7 @@ read = ->(*p) { File.read(File.join(ROOT, *p), encoding: 'UTF-8') }
 # Nothing in these files has any business containing a backtick except
 # the template delimiters themselves, so any backtick on a comment line
 # is a bug.
-%w[src/post.js src/world.js src/suite.js src/desert.js src/convention.js src/npc.js src/main.js src/game.js src/audio.js].each do |f|
+%w[src/post.js src/world.js src/suite.js src/desert.js src/convention.js src/npc.js src/main.js src/game.js src/audio.js src/touch.js].each do |f|
   read.call(f).each_line.with_index(1) do |line, n|
     next unless line =~ %r{^\s*(//|/\*|\*)}
     abort "#{f}:#{n} backtick in a comment would end a shader string:\n  #{line.strip}" if line.include?('`')
@@ -48,7 +48,7 @@ end
 
 
 # main.js runs on load, so it goes last
-SOURCES = %w[audio.js post.js world.js suite.js desert.js convention.js npc.js game.js main.js]
+SOURCES = %w[audio.js post.js world.js suite.js desert.js convention.js npc.js game.js touch.js main.js]
 modname = ->(f) { '__m_' + File.basename(f, '.js') }
 
 def module_wrap(file, src, modname)

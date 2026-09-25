@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- added to the Home Screen it opens full screen, with no Safari bars -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Loathing" />
 <title>Fear &amp; Loathing</title>
 <style>
 /* ============================================================
@@ -694,6 +699,89 @@ canvas#gl{
 }
 #inventory .vial.empty .eff{ opacity:.22; }
 
+/* ------------------------------------------------------------
+   The phone (src/touch.js). Nothing here applies without html.touch,
+   which is only ever set on a touch screen.
+   ------------------------------------------------------------ */
+#case-btn, #tilt, #pedals, #turn-phone, .controls-touch{ display:none; }
+html.touch .controls{ display:none; }
+html.touch .controls-touch{
+  display:block; margin-top:20px;
+  font-family:var(--font-type); font-size:13px; line-height:1.8; color:var(--ink-dim);
+}
+html.touch .controls-touch b{ color:var(--amber); font-weight:normal; }
+
+html.touch, html.touch body{
+  overscroll-behavior:none;
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+}
+/* the game's own touches are all its own; the title still scrolls */
+html.touch #gl, html.touch #hud, html.touch #dialogue{ touch-action:none; }
+
+/* clear of the Dynamic Island, whichever side it ends up on */
+html.touch #hud{ left:env(safe-area-inset-left); right:env(safe-area-inset-right); }
+
+/* the things a thumb can land on */
+html.touch .dlg-options li, html.touch .vial, html.touch #tasks, html.touch #case-btn{
+  pointer-events:auto;
+}
+html.touch .dlg-options li{ padding-top:9px; padding-bottom:9px; }
+html.touch .dlg-hint{ display:none; }
+html.touch #prompt b{ font-size:0; }
+html.touch #prompt b::after{ content:'TAP'; font-size:13px; }
+
+/* the case lives behind a button; a tap on a vial takes it */
+html.touch #inventory{ display:none; }
+html.touch body.case-open #inventory{ display:grid; bottom:64px; z-index:6; }
+html.touch #case-btn{
+  display:block; position:fixed; right:22px; bottom:18px; z-index:6;
+  font-family:var(--font-display); font-size:17px; letter-spacing:.2em;
+  padding:8px 16px; color:var(--amber);
+  border:1px solid rgba(255,180,0,.55); background:rgba(8,5,3,.62);
+}
+html.touch body.case-open #case-btn{ background:rgba(255,180,0,.22); }
+html.touch #wallet{ bottom:64px; }
+html.touch body.case-open #wallet{ display:none; }
+
+/* the itinerary is small and folded until you tap it */
+html.touch #tasks{ width:min(280px, 34vw); padding:9px 11px 10px; }
+html.touch #tasks li{ font-size:11px; }
+html.touch #tasks.dim{ opacity:.35; transform:translateX(70%); }
+
+/* a spirit level: where the phone is, against the dead zone that stands still */
+html.touch #tilt{
+  display:block; position:fixed; left:50%; bottom:14px; z-index:5;
+  width:44px; height:44px; margin-left:-22px; border-radius:50%;
+  border:1px solid rgba(244,233,200,.28);
+  background:radial-gradient(circle, rgba(244,233,200,.12) 0 9px, transparent 10px);
+  pointer-events:none;
+}
+html.touch #tilt i{
+  position:absolute; left:17px; top:17px; width:10px; height:10px; border-radius:50%;
+  background:var(--amber); box-shadow:0 0 8px var(--amber);
+}
+
+html.touch.driving #pedals{
+  display:flex; justify-content:space-between;
+  position:fixed; left:18px; right:18px; top:44%; z-index:5;
+  font-family:var(--font-display); font-size:15px; letter-spacing:.3em;
+  color:rgba(244,233,200,.28); pointer-events:none;
+}
+
+@media (orientation: portrait){
+  html.touch #turn-phone{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    position:fixed; inset:0; z-index:100; padding:30px;
+    background:var(--paper); color:var(--amber); text-align:center;
+    font-family:var(--font-display); font-size:30px; letter-spacing:.14em;
+  }
+  html.touch #turn-phone small{
+    font-family:var(--font-type); font-size:13px; letter-spacing:.02em; color:var(--ink-dim);
+  }
+}
+
 </style>
 </head>
 <body>
@@ -735,7 +823,14 @@ canvas#gl{
   <div id="prompt" class="hidden"></div>
   <div id="subtitle" class="hidden"></div>
   <div id="toast-stack"></div>
+
+  <!-- the phone only: the case behind a button, a level, and the pedals -->
+  <div id="case-btn">CASE</div>
+  <div id="tilt"><i></i></div>
+  <div id="pedals"><span>BRAKE</span><span>GAS</span></div>
 </div>
+
+<div id="turn-phone">Turn the phone sideways.<small>If it will not turn, switch off Portrait Orientation Lock in Control Centre.</small></div>
 
 <!-- ============ DIALOGUE ============ -->
 <div id="dialogue" class="hidden">
@@ -810,6 +905,15 @@ canvas#gl{
       <div><b>1</b>&ndash;<b>4</b> answer, in conversation</div>
       <div><b>TAB</b> itinerary</div>
       <div><b>W</b> <b>A</b> <b>D</b> <b>S</b> drive &middot; steer &middot; brake</div>
+    </div>
+    <div class="controls-touch">
+      <div>Hold it sideways, the way you are holding it now.</div>
+      <div><b>TILT AWAY</b> walk &middot; <b>TOWARD</b> back up</div>
+      <div><b>TIP LEFT / RIGHT</b> step sideways</div>
+      <div><b>TURN YOURSELF</b> look round &middot; <b>DRAG</b> look</div>
+      <div><b>TAP</b> interact &middot; answer &middot; <b>CASE</b> take a dose</div>
+      <div><b>TWO FINGERS</b> level it again</div>
+      <div><b>IN THE CAR</b> tip it like a wheel &middot; right thumb gas &middot; left brake</div>
     </div>
 
     <button id="start">BEGIN THE DRIVE</button>
@@ -62370,6 +62474,228 @@ return { SUBSTANCES, STORY_COMPOSURE, Game, DIALOGUE };
 })();
 
 /* ==========================================================
+   touch.js
+   ========================================================== */
+var __m_touch = (function(){
+/* ============================================================
+   THE PHONE — the whole game played by holding it in landscape.
+
+   Only ever switched on for a touch screen (or ?touch in the URL, for
+   testing); a keyboard and a mouse never see any of this.
+
+     on foot   the phone is your head. Turn round with it and you turn
+               round. Tilt the top of it away from you to walk, towards
+               you to back up, and tip it left or right to step sideways.
+               Drag a finger to turn and look up and down from a chair.
+               Tap to do whatever the prompt says. Two fingers re-centre.
+     driving   the phone is the wheel: tip it like one. The right thumb
+               is the gas and the left thumb is the brake.
+
+   HOW THE TILT IS READ. Phones held for a game sit anywhere from upright
+   to nearly flat, and the obvious reading -- yaw, pitch and roll of the
+   camera -- turns to noise as the phone lies down, just when you tip it
+   forward to walk. So each gesture is read off the one part of the phone
+   the others barely move:
+     heading   which way the long edge of the screen points, flattened
+               onto the floor. Tipping it forward does not move that,
+               and neither does raising one end.
+     sideways  how far the long edge is raised off level: one end up.
+     forward   how far the screen has leaned back from facing you. At
+               rest you hold it wherever is comfortable, so that is
+               measured from where it was when you pressed BEGIN (or
+               the last two-finger tap), not from upright.
+   ============================================================ */
+const THREE = window.THREE;
+
+const DEG = Math.PI / 180;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+/** 0 inside the dead zone, rising to 1 at full, signed */
+const ramp = (v, dead, full) => Math.sign(v) * clamp((Math.abs(v) - dead) / (full - dead), 0, 1);
+
+const params = new URLSearchParams(location.search);
+const touch = {
+  on: params.has('touch') || matchMedia('(pointer: coarse)').matches,
+  ready: false,        // motion permission granted and a reading in
+  denied: false,
+  heading: 0, side: 0, lean: 0,   // radians, as read
+  side0: 0, lean0: 0,             // the resting hold
+  dYaw: 0,                        // turned since last sample
+  dragX: 0, dragY: 0,             // dragged since last sample, px
+  gas: false, brake: false,       // thumbs on either half, in the car
+  fingers: new Map(),
+};
+
+// ---------------------------------------------------------- the sensor
+const euler = new THREE.Euler();
+const q = new THREE.Quaternion();
+const qScreen = new THREE.Quaternion();
+// the camera looks out of the back of the phone, not out of its top
+const qBack = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const Z = new THREE.Vector3(0, 0, 1);
+const right = new THREE.Vector3(), normal = new THREE.Vector3();
+let lastHeading = null;
+
+function screenAngle() {
+  const a = screen.orientation && typeof screen.orientation.angle === 'number'
+    ? screen.orientation.angle : window.orientation;
+  return (+a || 0) * DEG;
+}
+
+function onOrientation(e) {
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+  // device -> the same world three.js draws in (y up), with the screen's
+  // own right and up as the camera's, whichever way round the phone is
+  euler.set(e.beta * DEG, e.alpha * DEG, -e.gamma * DEG, 'YXZ');
+  q.setFromEuler(euler).multiply(qBack).multiply(qScreen.setFromAxisAngle(Z, -screenAngle()));
+  right.set(1, 0, 0).applyQuaternion(q);     // along the screen, to the right
+  normal.set(0, 0, 1).applyQuaternion(q);    // out of the screen, at you
+
+  // Which way you face, read two ways and summed. The long edge flattened
+  // onto the floor ignores a tip that raises one end; the screen's own
+  // facing ignores a tip that turns it like a wheel. Held leaning back,
+  // either tip turns the phone a little about the vertical whichever way
+  // you read it, and summing the two halves that. Each counts for as much
+  // as it lies flat, so a phone lying on its back reads off its edge alone.
+  // (a camera at yaw h has right = (cos h, 0, -sin h), and faces
+  // (-sin h, 0, -cos h), which is away from the screen)
+  const fx = right.z - normal.x, fz = -right.x - normal.z;
+  const heading = Math.atan2(-fx, -fz);
+  // + when the right-hand end is up: tipped to the LEFT
+  const side = Math.asin(clamp(right.y, -1, 1));
+  // lean: 0 facing you, 90 flat on its back. Measured against the way you
+  // face, so a phone tipped past flat keeps counting instead of folding back.
+  const toYou = normal.x * Math.sin(heading) + normal.z * Math.cos(heading);
+  const lean = Math.atan2(normal.y, toYou);
+
+  if (lastHeading === null) { lastHeading = heading; touch.side0 = side; touch.lean0 = lean; }
+  let d = heading - lastHeading;
+  if (d > Math.PI) d -= 2 * Math.PI;
+  if (d < -Math.PI) d += 2 * Math.PI;
+  lastHeading = heading;
+  // with the long edge pointing at the floor there is no heading to read
+  if (Math.abs(right.y) < 0.9) touch.dYaw += d;
+  touch.heading = heading; touch.side = side; touch.lean = lean;
+  touch.ready = true;
+}
+
+/** motion needs asking for on iOS, and only from inside a tap */
+function askForMotion() {
+  if (!touch.on) return;
+  const listen = () => addEventListener('deviceorientation', onOrientation);
+  const D = window.DeviceOrientationEvent;
+  if (D && typeof D.requestPermission === 'function') {
+    D.requestPermission()
+      .then((r) => { if (r === 'granted') listen(); else touch.denied = true; })
+      .catch(() => { touch.denied = true; });
+  } else {
+    listen();
+  }
+}
+
+/** the way you are holding it now is the way you hold it at rest */
+function recentre() {
+  touch.side0 = touch.side;
+  touch.lean0 = touch.lean;
+}
+
+// ---------------------------------------------------------- the fingers
+const TAP_MS = 280, TAP_PX = 14;
+let handlers = {};
+let twoFinger = 0;
+
+function onStart(e) {
+  // the title and the end card are ordinary pages with ordinary buttons
+  if (e.target.closest('#title, #endcard')) return;
+  e.preventDefault();   // no zoom, no scroll, no pretend mouse
+  const now = performance.now();
+  for (const t of e.changedTouches) {
+    touch.fingers.set(t.identifier, { x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY,
+      t0: now, moved: false, left: t.clientX < innerWidth / 2, target: e.target });
+  }
+  if (touch.fingers.size === 2) twoFinger = now;
+  pedals();
+}
+
+function onMove(e) {
+  if (e.target.closest('#title, #endcard')) return;
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const f = touch.fingers.get(t.identifier);
+    if (!f) continue;
+    if (Math.hypot(t.clientX - f.x0, t.clientY - f.y0) > TAP_PX) f.moved = true;
+    touch.dragX += t.clientX - f.x;
+    touch.dragY += t.clientY - f.y;
+    f.x = t.clientX; f.y = t.clientY;
+  }
+}
+
+function onEnd(e) {
+  if (e.target.closest('#title, #endcard')) return;
+  e.preventDefault();
+  const now = performance.now();
+  for (const t of e.changedTouches) {
+    const f = touch.fingers.get(t.identifier);
+    touch.fingers.delete(t.identifier);
+    if (!f || f.moved || now - f.t0 > TAP_MS) continue;
+    if (twoFinger && now - twoFinger < TAP_MS + 60) {
+      // the second finger of a two-finger tap: once is enough
+      if (touch.fingers.size === 0) { twoFinger = 0; recentre(); handlers.recentred?.(); }
+      continue;
+    }
+    handlers.tap?.(f.target, f.x0, f.y0);
+  }
+  pedals();
+}
+
+/** in the car, a thumb held on either half of the screen */
+function pedals() {
+  let gas = false, brake = false;
+  for (const f of touch.fingers.values()) {
+    if (f.target.closest?.('#case-btn, #inventory, #tasks, #dialogue')) continue;
+    if (f.left) brake = true; else gas = true;
+  }
+  touch.gas = gas; touch.brake = brake;
+}
+
+function initTouch(h) {
+  handlers = h;
+  if (!touch.on) return;
+  document.documentElement.classList.add('touch');
+  const opt = { passive: false };
+  document.addEventListener('touchstart', onStart, opt);
+  document.addEventListener('touchmove', onMove, opt);
+  document.addEventListener('touchend', onEnd, opt);
+  document.addEventListener('touchcancel', onEnd, opt);
+  // iOS still pinch-zooms a page that says it may not
+  document.addEventListener('gesturestart', (e) => e.preventDefault(), opt);
+}
+
+/* What the phone is asking for this frame. Turning and dragging are
+   handed over once and then cleared; the tilts are where they are.
+     walk, strafe   -1..1, + is forward / right
+     run            tipped well past a walk
+     steer          -1..1, + is left, the way the car's A key turns it
+     tilt           the bubble for the on-screen level, -1..1 each way */
+function sampleTouch() {
+  const lean = (touch.lean - touch.lean0) / DEG;
+  const side = (touch.side - touch.side0) / DEG;
+  const out = {
+    turn: touch.dYaw, dragX: touch.dragX, dragY: touch.dragY,
+    walk: touch.ready ? ramp(lean, 7, 22) : 0,
+    strafe: touch.ready ? -ramp(side, 7, 22) : 0,
+    run: touch.ready && lean > 32,
+    steer: touch.ready ? ramp(side, 2.5, 30) : 0,
+    tilt: [clamp(-side / 30, -1, 1), clamp(-lean / 30, -1, 1)],
+    gas: touch.gas, brake: touch.brake,
+  };
+  touch.dYaw = 0; touch.dragX = 0; touch.dragY = 0;
+  return out;
+}
+
+return { touch, askForMotion, recentre, initTouch, sampleTouch };
+})();
+
+/* ==========================================================
    main.js
    ========================================================== */
 var __m_main = (function(){
@@ -62387,6 +62713,7 @@ const { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } = __m_npc;
 const { Post } = __m_post;
 const { Audio } = __m_audio;
 const { Game, SUBSTANCES, STORY_COMPOSURE } = __m_game;
+const { touch, initTouch, askForMotion, sampleTouch } = __m_touch;
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -63763,6 +64090,73 @@ function leaveCar() {
   audio.engine(-1);
 }
 
+/* ------------------------------------------------ the phone
+   What src/touch.js reads, turned into what the mouse and the keys would
+   have done, so everything downstream -- the drugs on your hands, the
+   stagger, the car -- treats it exactly the same. Turning the phone and
+   dragging a finger go in where the mouse goes (and lag and overshoot
+   like it on booze and ether); the tilt goes in where the keys go. */
+const phone = { walk: 0, strafe: 0, run: false };
+let phoneDriving = false;
+const tiltDot = document.querySelector('#tilt i');
+function phoneInput() {
+  if (!touch.on) return;
+  const t = sampleTouch();
+  const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
+  document.documentElement.classList.toggle('driving', driving);
+
+  if (!game.over) {
+    player.lookLag.x -= t.turn;
+    // in the car the thumbs are on the pedals, not looking about
+    if (!driving) {
+      player.lookLag.x += t.dragX * 0.005;
+      player.lookLag.y += t.dragY * 0.004;
+    }
+  }
+  // hands full of a conversation: tapping an answer is not an order to walk
+  const still = !!game.dlg || driving;
+  phone.walk = still ? 0 : t.walk;
+  phone.strafe = still ? 0 : t.strafe;
+  phone.run = !still && t.run;
+  if (tiltDot) tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
+
+  if (driving) {
+    // The wheel. The car only knows A and D, so the phone works them: held
+    // while the wheel is short of where the phone is, let go once it is
+    // there. The lock is stepCar's own, so a phone tipped halfway puts the
+    // wheel halfway at any speed. The car itself is not touched.
+    keys.KeyW = t.gas;
+    keys.KeyS = t.brake;
+    const v = Math.abs(car.speed);
+    const lock = 0.55 / (1 + Math.max(0, v - 4) * 0.4 + v * v * 0.012);
+    const err = t.steer * lock - (car.wheel || 0);
+    keys.KeyA = err > 0.012;
+    keys.KeyD = err < -0.012;
+    phoneDriving = true;
+  } else if (phoneDriving) {
+    keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false;
+    phoneDriving = false;
+  }
+}
+
+initTouch({
+  // a tap on the view is E; a tap on a thing on screen is that thing
+  tap(target) {
+    if (!started || game.over) return;
+    const opt = target.closest('.dlg-options li');
+    if (opt) { game.choose([...opt.parentNode.children].indexOf(opt)); return; }
+    const vial = target.closest('.vial');
+    if (vial) { game.take(vial.dataset.k); document.body.classList.remove('case-open'); return; }
+    if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
+    if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
+    if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
+    // in the car a quick tap is a dab on a pedal
+    if (game.dlg || document.documentElement.classList.contains('driving')) return;
+    interact();
+  },
+  recentred() { game.toast('LEVEL', 'info'); },
+});
+
 /* ------------------------------------------------ fades
    A cut to black and back, with the change of scene in the dark middle.
    Leaving the suite used to teleport you into a moving car mid-frame. */
@@ -64136,13 +64530,15 @@ function movePlayer(dt, s) {
     if (keys.KeyS || keys.ArrowDown) iz += 1;
     if (keys.KeyA || keys.ArrowLeft) ix -= 1;
     if (keys.KeyD || keys.ArrowRight) ix += 1;
+    // a phone tipped a little walks a little (keys only ever give 1 or more)
+    ix += phone.strafe; iz -= phone.walk;
   }
   const mag = Math.hypot(ix, iz);
-  if (mag > 0) { ix /= mag; iz /= mag; }
+  if (mag > 1) { ix /= mag; iz /= mag; }
 
   // forward is -Z at yaw 0, which is where the camera looks
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
-  const run = (keys.ShiftLeft || keys.ShiftRight) ? 1.6 : 1;
+  const run = (keys.ShiftLeft || keys.ShiftRight || phone.run) ? 1.6 : 1;
   const base = 4.4 * run * (1 - s.fear * 0.15) * (1 - lost * 0.42) * (s.legSpeed ?? 1);
 
   const wantX = (ix * cy + iz * sy) * base;
@@ -64284,6 +64680,8 @@ function tick(dt, draw = true) {
     audio.door();
     game.say('You get back in and turn the car around. The road runs back to the hotel.');
   }
+
+  phoneInput();
 
   // How much humanity is breathing on you right now. Upstairs there are at
   // most two people in the room and a shut door is the whole point of the
@@ -64458,6 +64856,8 @@ resize();
 
 /* --------------------------------------------------- start */
 document.getElementById('start').addEventListener('click', () => {
+  askForMotion();
+  if (touch.on) document.getElementById('tasks').classList.add('dim');
   audio.start();
   audio.resume();
   document.getElementById('title').classList.add('hidden');
@@ -64467,6 +64867,10 @@ document.getElementById('start').addEventListener('click', () => {
   grabMouse();
   setTimeout(() => game.say(
     'Somewhere around the edge of the carpet the drugs began to take hold.'), 900);
+  if (touch.on) setTimeout(() => game.say(touch.denied
+    ? 'No motion access, so drag to look. To tilt and walk, close this tab, open the game again and tap Allow.'
+    : 'Tilt forward to walk, tip sideways to step, turn yourself to look round. Tap to act. Two fingers to level.',
+  null, 7), 5600);
 });
 
 document.getElementById('again').addEventListener('click', () => location.reload());

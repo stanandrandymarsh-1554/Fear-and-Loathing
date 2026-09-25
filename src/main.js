@@ -12,6 +12,7 @@ import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js
 import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
+import { touch, initTouch, askForMotion, sampleTouch } from './touch.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -1554,6 +1555,73 @@ function leaveCar() {
   audio.engine(-1);
 }
 
+/* ------------------------------------------------ the phone
+   What src/touch.js reads, turned into what the mouse and the keys would
+   have done, so everything downstream -- the drugs on your hands, the
+   stagger, the car -- treats it exactly the same. Turning the phone and
+   dragging a finger go in where the mouse goes (and lag and overshoot
+   like it on booze and ether); the tilt goes in where the keys go. */
+const phone = { walk: 0, strafe: 0, run: false };
+let phoneDriving = false;
+const tiltDot = document.querySelector('#tilt i');
+function phoneInput() {
+  if (!touch.on) return;
+  const t = sampleTouch();
+  const driving = game.act === 3 && car.stage === 'road' && !car.parked && !wrecking;
+  document.documentElement.classList.toggle('driving', driving);
+
+  if (!game.over) {
+    player.lookLag.x -= t.turn;
+    // in the car the thumbs are on the pedals, not looking about
+    if (!driving) {
+      player.lookLag.x += t.dragX * 0.005;
+      player.lookLag.y += t.dragY * 0.004;
+    }
+  }
+  // hands full of a conversation: tapping an answer is not an order to walk
+  const still = !!game.dlg || driving;
+  phone.walk = still ? 0 : t.walk;
+  phone.strafe = still ? 0 : t.strafe;
+  phone.run = !still && t.run;
+  if (tiltDot) tiltDot.style.transform = `translate(${(t.tilt[0] * 15).toFixed(1)}px, ${(t.tilt[1] * 15).toFixed(1)}px)`;
+
+  if (driving) {
+    // The wheel. The car only knows A and D, so the phone works them: held
+    // while the wheel is short of where the phone is, let go once it is
+    // there. The lock is stepCar's own, so a phone tipped halfway puts the
+    // wheel halfway at any speed. The car itself is not touched.
+    keys.KeyW = t.gas;
+    keys.KeyS = t.brake;
+    const v = Math.abs(car.speed);
+    const lock = 0.55 / (1 + Math.max(0, v - 4) * 0.4 + v * v * 0.012);
+    const err = t.steer * lock - (car.wheel || 0);
+    keys.KeyA = err > 0.012;
+    keys.KeyD = err < -0.012;
+    phoneDriving = true;
+  } else if (phoneDriving) {
+    keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false;
+    phoneDriving = false;
+  }
+}
+
+initTouch({
+  // a tap on the view is E; a tap on a thing on screen is that thing
+  tap(target) {
+    if (!started || game.over) return;
+    const opt = target.closest('.dlg-options li');
+    if (opt) { game.choose([...opt.parentNode.children].indexOf(opt)); return; }
+    const vial = target.closest('.vial');
+    if (vial) { game.take(vial.dataset.k); document.body.classList.remove('case-open'); return; }
+    if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
+    if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
+    if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
+    // in the car a quick tap is a dab on a pedal
+    if (game.dlg || document.documentElement.classList.contains('driving')) return;
+    interact();
+  },
+  recentred() { game.toast('LEVEL', 'info'); },
+});
+
 /* ------------------------------------------------ fades
    A cut to black and back, with the change of scene in the dark middle.
    Leaving the suite used to teleport you into a moving car mid-frame. */
@@ -1927,13 +1995,15 @@ function movePlayer(dt, s) {
     if (keys.KeyS || keys.ArrowDown) iz += 1;
     if (keys.KeyA || keys.ArrowLeft) ix -= 1;
     if (keys.KeyD || keys.ArrowRight) ix += 1;
+    // a phone tipped a little walks a little (keys only ever give 1 or more)
+    ix += phone.strafe; iz -= phone.walk;
   }
   const mag = Math.hypot(ix, iz);
-  if (mag > 0) { ix /= mag; iz /= mag; }
+  if (mag > 1) { ix /= mag; iz /= mag; }
 
   // forward is -Z at yaw 0, which is where the camera looks
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
-  const run = (keys.ShiftLeft || keys.ShiftRight) ? 1.6 : 1;
+  const run = (keys.ShiftLeft || keys.ShiftRight || phone.run) ? 1.6 : 1;
   const base = 4.4 * run * (1 - s.fear * 0.15) * (1 - lost * 0.42) * (s.legSpeed ?? 1);
 
   const wantX = (ix * cy + iz * sy) * base;
@@ -2082,6 +2152,8 @@ function tick(dt, draw = true) {
     audio.door();
     game.say('You get back in and turn the car around. The road runs back to the hotel.');
   }
+
+  phoneInput();
 
   // How much humanity is breathing on you right now. Upstairs there are at
   // most two people in the room and a shut door is the whole point of the
@@ -2467,6 +2539,8 @@ resize();
 
 /* --------------------------------------------------- start */
 document.getElementById('start').addEventListener('click', () => {
+  askForMotion();
+  if (touch.on) document.getElementById('tasks').classList.add('dim');
   audio.start();
   audio.resume();
   document.getElementById('title').classList.add('hidden');
@@ -2476,6 +2550,10 @@ document.getElementById('start').addEventListener('click', () => {
   grabMouse();
   setTimeout(() => game.say(
     'Somewhere around the edge of the carpet the drugs began to take hold.'), 900);
+  if (touch.on) setTimeout(() => game.say(touch.denied
+    ? 'No motion access, so drag to look. To tilt and walk, close this tab, open the game again and tap Allow.'
+    : 'Tilt forward to walk, tip sideways to step, turn yourself to look round. Tap to act. Two fingers to level.',
+  null, 7), 5600);
 });
 
 document.getElementById('again').addEventListener('click', () => location.reload());
