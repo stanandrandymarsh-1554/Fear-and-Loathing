@@ -660,7 +660,7 @@ canvas#gl{
    The phone (src/touch.js). Nothing here applies without html.touch,
    which is only ever set on a touch screen.
    ------------------------------------------------------------ */
-#case-btn, #pedals, #turn-phone, .controls-touch{ display:none; }
+#case-btn, #drive, #turn-phone, .controls-touch{ display:none; }
 html.touch .controls{ display:none; }
 html.touch .controls-touch{
   display:block; margin-top:20px;
@@ -719,12 +719,27 @@ html.touch #stick i{
   background:rgba(255,180,0,.35); border:1px solid rgba(255,180,0,.7);
 }
 
-html.touch.driving #pedals{
-  display:flex; justify-content:space-between;
-  position:fixed; left:18px; right:18px; top:44%; z-index:5;
-  font-family:var(--font-display); font-size:15px; letter-spacing:.3em;
-  color:rgba(244,233,200,.28); pointer-events:none;
+/* the car: steer under the left thumb, brake and gas under the right */
+html.touch.driving #drive{ display:block; }
+#drive [data-pad]{
+  position:fixed; z-index:5; pointer-events:none;
+  width:92px; height:92px; border-radius:18px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-display); font-size:17px; letter-spacing:.12em;
+  color:rgba(244,233,200,.8); background:rgba(8,5,3,.4);
+  border:1px solid rgba(244,233,200,.35);
 }
+#drive [data-pad="left"]{ left:calc(env(safe-area-inset-left) + 20px); bottom:22px; font-size:30px; }
+#drive [data-pad="right"]{ left:calc(env(safe-area-inset-left) + 128px); bottom:22px; font-size:30px; }
+#drive [data-pad="brake"]{ right:calc(env(safe-area-inset-right) + 128px); bottom:22px; }
+#drive [data-pad="gas"]{ right:calc(env(safe-area-inset-right) + 20px); bottom:22px; height:124px; }
+#drive [data-pad].on{ background:rgba(255,180,0,.4); border-color:rgba(255,180,0,.9); color:#fff; }
+/* and what sat under them moves out of the way: the case to the middle,
+   the meters to the top corner, the wallet away (nothing to buy out here) */
+html.touch.driving #case-btn{ right:auto; left:50%; transform:translateX(-50%); }
+html.touch.driving #meters{ top:14px; bottom:auto; gap:6px; }
+html.touch.driving #stats{ top:108px; bottom:auto; }
+html.touch.driving #wallet{ display:none; }
 
 @media (orientation: portrait){
   html.touch #turn-phone{
