@@ -395,6 +395,21 @@ export class Audio {
     setTimeout(() => this._blip(1320, 0.12, 'sine', 0.08), 70);
   }
 
+  /** a card off the shoe and onto the felt */
+  card() {
+    if (!this.ctx) return;
+    this._burst(3200, 0.05, 1.2, 0.07, 'highpass', rnd(-0.2, 0.2));
+    setTimeout(() => this._burst(900, 0.04, 2, 0.04, 'bandpass'), 35);
+  }
+
+  /** clay chips, stacked and pushed */
+  chips() {
+    if (!this.ctx) return;
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => this._blip(rnd(2600, 3400), 0.035, 'triangle', 0.035, rnd(-0.2, 0.2)), i * rnd(28, 55));
+    }
+  }
+
   /** an option you could not take */
   deny() {
     const ctx = this.ctx, t = ctx.currentTime;
@@ -660,7 +675,8 @@ export class Audio {
          psych  detunes and wanders; the drone is the hallucinogen
          rush   opens it up and sharpens it, heart first
     */
-    const muffled = s.dim * 0.80 + s.blur * 0.35;
+    // capped: past 1/0.97 the pow below is NaN, and a NaN here throws and takes the frame with it
+    const muffled = Math.min(1, s.dim * 0.80 + s.blur * 0.35);
     const cut = 20000 * Math.pow(1 - muffled * 0.97, 2.6) + 300;
     this.muffle.frequency.setTargetAtTime(cut, now, 0.35);
     this.muffle.Q.setTargetAtTime(0.9 + s.dim * 6, now, 0.4);
