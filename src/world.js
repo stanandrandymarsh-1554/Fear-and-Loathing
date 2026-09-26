@@ -980,6 +980,8 @@ function buildPits(scene, box, mat, spots) {
   const chipGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.12, 10);
   const chipMats = chipCols.map((c) => mat({ color: c, roughness: 0.5 }));
   const stoolMat = mat({ color: 0x6a1420, roughness: 0.6 });
+  // the six you can sit down at: the middle stool of each is kept for you
+  const tables = [];
 
   // east: blackjack, three and three, dealers facing the pit
   [13, 19, 25].forEach((x) => {
@@ -1006,10 +1008,10 @@ function buildPits(scene, box, mat, spots) {
         const px = x + Math.sin(a) * 1.75, pz = z + side * Math.cos(a) * 1.75;
         const st = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 10), stoolMat);
         st.position.set(px, 0.72, pz); scene.add(st);
-        if ((x + a * 10) % 3 !== 0) {
-          spots.fixed.push({ kind: 'sit', x: px, z: pz, ry: Math.atan2(x - px, z - pz) });
-        }
+        if (a !== 0) spots.fixed.push({ kind: 'sit', x: px, z: pz, ry: Math.atan2(x - px, z - pz) });
       });
+      // looking across the felt at the dealer: -Z from the +Z side
+      tables.push({ x, z, side, seat: { x, z: z + side * 1.75 }, yaw: side > 0 ? 0 : Math.PI });
     });
   });
 
@@ -1058,6 +1060,7 @@ function buildPits(scene, box, mat, spots) {
       scene.add(c);
     });
   });
+  return tables;
 }
 
 /* ============================================================
@@ -2108,7 +2111,7 @@ export function buildWorld(parent) {
       }
     });
   }
-  buildPits(scene, box, mat, spots);
+  const tables = buildPits(scene, box, mat, spots);
 
   /* ===================== REGISTRATION WING, to the north */
   const LOB_X = 20, LOB_Z0 = -30, LOB_Z1 = -56;
@@ -2366,7 +2369,7 @@ export function buildWorld(parent) {
 
   return {
     root: scene,
-    colliders, update, spots, carousel, machines, screens,
+    colliders, update, spots, carousel, machines, screens, tables,
     R, CAROUSEL_R, LOB_X, LOB_Z0, LOB_Z1,
     frontage, lounge,
   };

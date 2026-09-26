@@ -1752,7 +1752,7 @@ export class Game {
         parts.push(`${opt.req.stat.toUpperCase()} ${have}/${need}`);
       }
       if (opt.needs === 'key' && !spent) parts.push(this.hasKey ? 'KEY' : 'NO KEY');
-      if (opt.cost && !spent) parts.push(`$${this.money}/$${opt.cost}`);
+      if (opt.cost && !spent) parts.push(`$${Math.floor(this.money)}/$${opt.cost}`);
       // a requirement you meet is not printed at all
       req.textContent = ok ? '' : parts.join('  ');
 
@@ -1910,6 +1910,8 @@ export class Game {
       + `DOSES TAKEN &nbsp;${this.dosesTaken}<br>`
       + `BLACKOUTS &nbsp;${this.blackouts}<br>`
       + (this.crashes ? `WRECKS &nbsp;${this.crashes}<br>` : '')
+      + (this.handsPlayed ? `BLACKJACK &nbsp;${this.handsPlayed} HANDS, `
+        + `${this.tableNet >= 0 ? '+' : '−'}$${Math.abs(this.tableNet).toFixed(this.tableNet % 1 ? 2 : 0)}<br>` : '')
       + `FINAL LOATHING &nbsp;${Math.round(this.loathing * 100)}%<br>`
       + `TIME ON THE FLOOR &nbsp;${Math.floor(this.elapsed / 60)}m ${Math.floor(this.elapsed % 60)}s`;
     setTimeout(() => ec.classList.remove('hidden'), won ? 1200 : 2200);
@@ -2267,7 +2269,7 @@ export class Game {
 
     const w = document.getElementById('wallet');
     if (w) {
-      w.querySelector('.amt').textContent = '$' + this.money;
+      w.querySelector('.amt').textContent = '$' + (this.money % 1 ? this.money.toFixed(2) : this.money);
       w.classList.toggle('broke', this.money < 15);
     }
 

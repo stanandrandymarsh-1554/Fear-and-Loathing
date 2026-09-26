@@ -13,6 +13,7 @@ import { Audio } from './audio.js';
 import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
 import { touch, initTouch, askForMotion, sampleTouch, resetTouch } from './touch.js';
 import { buildMint, MINT, PITS, MINT_SPAWN } from './mint.js';
+import { Blackjack, cash } from './blackjack.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -444,6 +445,8 @@ function updateTraffic(dt, dir) {
 const audio = new Audio();
 const game = new Game(audio);
 const bats = new BatSwarm(scene);
+const bj = new Blackjack(game, audio);
+bj.getUp = () => leaveTable();
 
 /* ------------------------------------ the four that matter */
 // reach is per-NPC: anyone behind a counter you cannot walk through
@@ -627,6 +630,12 @@ addEventListener('keydown', (e) => {
     return;
   }
 
+  // at the table the letters are the game; the digits are still the case
+  if (bj.seated && !game.dlg) {
+    if (e.code === 'KeyE') { e.preventDefault(); leaveTable(); return; }
+    if (bj.key(e.code)) { e.preventDefault(); return; }
+  }
+
   // 1-9 then 0, because the briefcase holds ten things
   const digit = /^Digit([0-9])$/.exec(e.code);
   if (digit) {
@@ -718,7 +727,7 @@ let hudBox = null;                     // measured once, again after a resize or
 
 function updateObjective() {
   // no hand-holding while you are being spoken to, or once it is over
-  if (game.over || game.dlg || !started) { objEl.classList.add('hidden'); return; }
+  if (game.over || game.dlg || !started || bj.seated) { objEl.classList.add('hidden'); return; }
   // Only an errand in this act can have a live target: each act completes
   // its tasks as you leave it, so anything still active is nearby.
   const task = game.tasks.find((t) => {
@@ -832,6 +841,8 @@ function interact() {
   } else if (f.kind === 'briefcase') {
     briefcase.taken = true;
     game.takeBriefcase();
+  } else if (f.kind === 'table') {
+    sitAtTable(f.obj);
   } else if (f.kind === 'slot') {
     const res = game.gamble(5);
     if (res) {
@@ -883,6 +894,13 @@ const fwd = new THREE.Vector3();
 
 function findFocus() {
   if (game.dlg || game.over) { focusTarget = null; return; }
+  // in the chair at the table: the table is the whole interface
+  if (bj.seated) {
+    focusTarget = null;
+    game.setPrompt(null);
+    document.getElementById('reticle').classList.remove('hot');
+    return;
+  }
   camera.getWorldDirection(fwd);
 
   let best = null, bestScore = -1;
@@ -1025,6 +1043,11 @@ function findFocus() {
   // a machine is a machine. five dollars a pull.
   const brokeSlot = game.money < 5 ? 'You are out of money.' : null;
   world.machines.forEach((m) => consider('slot', m, m, 2.4, 'PLAY  $5', brokeSlot));
+
+  // the blackjack tables in the east pit: the middle stool is yours
+  const tableShut = bj.barred ? 'The pit boss has asked you to stay away from the tables.'
+    : game.money < 5 ? 'You are out of money.' : null;
+  world.tables.forEach((tb) => consider('table', tb, tb.seat, 2.0, 'SIT DOWN AT BLACKJACK', tableShut, 0.3));
 
   // the nautical bar: a straight counter, so the nearest point along it
   {
@@ -1383,6 +1406,38 @@ function wakeAtBar() {
 // the lounge door off the east side of the lobby, which is the way into the
 // convention wing -- the way you come back out of it on the last morning
 const LOUNGE_DOOR_AT = new THREE.Vector3(world.LOB_X - 0.6, 1.4, -44);
+
+/* Onto the middle stool at a blackjack table. You can look round the pit,
+   and take whatever is in the case, but the chair does not go anywhere. */
+function sitAtTable(tb) {
+  if (bj.seated) return;
+  player.pos.set(tb.seat.x, 1.42, tb.seat.z);
+  player.vel.set(0, 0, 0);
+  player.lookLag.set(0, 0);
+  player.yaw = tb.yaw; player.pitch = -0.3;
+  audio.door();
+  bj.sit(tb);
+}
+function standFromTable() {
+  const tb = bj.table || null;
+  bj.leave();
+  if (!tb) return;
+  // back off the stool, away from the felt
+  player.pos.set(tb.seat.x, 1.72, tb.seat.z + tb.side * 0.7);
+  player.vel.set(0, 0, 0);
+}
+function leaveTable() {
+  if (!bj.seated) return;
+  // your money is in the circle: finish the hand
+  if (bj.busy) { audio.deny(); game.say('Not with money on the felt. Finish the hand.'); return; }
+  const played = bj.sessionHands;
+  const net = bj.net - bj.sessionFrom;
+  standFromTable();
+  if (!played) return;
+  game.say(net > 0 ? `You get up ${cash(net)} ahead, which is its own kind of trouble.`
+    : net < 0 ? `You get up ${cash(-net)} down. It felt like less while you were sitting.`
+      : 'You get up exactly even, which nobody has ever done on purpose.');
+}
 
 /* Into the chair for the keynote. You can look around -- at the lizards,
    mostly -- but not get up without making a scene of it. */
@@ -1778,7 +1833,7 @@ function phoneInput() {
     player.lookLag.y += t.dragY * 0.004;
   }
   // a conversation, a cut to black or a chair: the legs are not yours
-  const still = !!game.dlg || driving || !!fade || !!winning || seminar.seated || game.over;
+  const still = !!game.dlg || driving || !!fade || !!winning || seminar.seated || bj.seated || game.over;
   phone.walk = still ? 0 : t.walk;
   phone.strafe = still ? 0 : t.strafe;
   phone.run = !still && t.run;
@@ -1807,6 +1862,8 @@ initTouch({
   // a tap on the view is E; a tap on a thing on screen is that thing
   tap(target) {
     if (!started || game.over) return;
+    const chip = target.closest('[data-bj]');
+    if (chip) { bj.action(chip.dataset.bj); return; }
     const opt = target.closest('.dlg-options li');
     if (opt) { game.choose([...opt.parentNode.children].indexOf(opt)); return; }
     const vial = target.closest('.vial');
@@ -1816,6 +1873,7 @@ initTouch({
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
     // in the car the buttons are all there is
     if (game.dlg || document.documentElement.classList.contains('driving')) return;
+    if (bj.seated) return;
     interact();
   },
 });
@@ -2281,7 +2339,7 @@ function movePlayer(dt, s) {
   // ---- walk ------------------------------------------------
   let ix = 0, iz = 0;
   // no walking through a cut to black, or out of a closing lift
-  if (!fade && !winning && !seminar.seated) {
+  if (!fade && !winning && !seminar.seated && !bj.seated) {
     if (keys.KeyW || keys.ArrowUp) iz -= 1;
     if (keys.KeyS || keys.ArrowDown) iz += 1;
     if (keys.KeyA || keys.ArrowLeft) ix -= 1;
@@ -2328,6 +2386,10 @@ function movePlayer(dt, s) {
   // in the chair you sway, but the chair does not go anywhere
   if (seminar.seated) {
     player.pos.x = CONV_X + CONV.seat.x; player.pos.z = CONV.seat.z;
+    player.vel.set(0, 0, 0);
+  }
+  if (bj.seated) {
+    player.pos.x = bj.table.seat.x; player.pos.z = bj.table.seat.z;
     player.vel.set(0, 0, 0);
   }
 
@@ -2791,6 +2853,9 @@ function tick(dt, draw = true) {
   updateCarAttorney(dt, s2);
   if (patrolman.group.visible) patrolman.update(clock, s2, player.pos, false);
 
+  // a blackout takes you out of the chair, and your bet stays on the felt
+  if (bj.seated && (game._blacking > 0 || game.over)) { bj.forfeit(); standFromTable(); }
+  bj.update(dt);
   findFocus();
   updateObjective();
   audio.update(s2, dt);
