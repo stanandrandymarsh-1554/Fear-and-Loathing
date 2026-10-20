@@ -878,3 +878,47 @@ html.touch .bj-controls kbd{ display:none; }
   .bj-controls .chip{ width:42px; height:42px; font-size:11px; border-width:3px; }
   .bj-controls button{ font-size:12px; padding:5px 10px; }
 }
+
+/* ------------------------------------------------------------
+   The plug's bag (src/plug.js): the blackjack panel's frame, a list
+   down the middle of it.
+   ------------------------------------------------------------ */
+#plug{
+  position:fixed; left:0; right:0; top:0; z-index:8;
+  display:flex; justify-content:center;
+  padding:10px 12px 0;
+  pointer-events:none;
+}
+#plug.hidden{ display:none; }
+.plug-frame{ background:linear-gradient(180deg, rgba(28,16,8,.96), rgba(14,8,4,.97)); max-height:calc(100vh - 20px); overflow:auto; }
+#plug:not(.hidden) .plug-frame{ animation:dlgIn .28s ease-out; }
+.pl-list{ display:flex; flex-direction:column; gap:2px; }
+.pl-row{
+  display:grid; grid-template-columns:22px 1fr 58px 58px 100px; align-items:center; gap:8px;
+  padding:3px 8px; border-left:2px solid transparent; cursor:pointer;
+  font-size:13px; color:#efe3c2;
+}
+.pl-row.sel{ background:rgba(255,180,0,.09); border-left-color:var(--amber); }
+.pl-glyph{ font-size:16px; text-align:center; }
+.pl-name{ font-family:var(--font-display); letter-spacing:.14em; }
+.pl-price{ color:var(--acid); text-align:right; }
+.pl-price.short{ color:var(--red); }
+.pl-row button{
+  font-family:var(--font-display); font-size:11px; letter-spacing:.12em;
+  color:#f2e8cf; background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,255,255,.25); padding:3px 6px; cursor:pointer;
+}
+.pl-row button.off{ opacity:.35; }
+.pl-row .pl-steal, .bj-controls .pl-steal{ color:var(--red); border-color:rgba(255,45,31,.45); }
+.pl-blurb{ font-size:12.5px; line-height:1.4; color:rgba(230,210,150,.75); margin:6px 0 2px; min-height:1.4em; font-style:italic; }
+.pl-keys{ font-size:10px; color:var(--ink-dim); letter-spacing:.1em; }
+.pl-keys kbd{ font:600 9px/1 var(--mono, ui-monospace, monospace); color:var(--amber); border:1px solid var(--amber); padding:1px 4px; margin-right:3px; }
+html.touch .pl-keys{ display:none; }
+html.touch .pl-row, html.touch .pl-row button{ pointer-events:auto; }
+@media (max-height: 480px){
+  #plug{ padding-top:4px; }
+  .plug-frame{ width:min(640px, 80vw); padding:6px 12px 8px; }
+  .pl-row{ font-size:11px; padding:1px 6px; grid-template-columns:18px 1fr 48px 50px 88px; }
+  .pl-row button{ font-size:10px; padding:2px 5px; }
+  .pl-blurb{ display:none; }
+}

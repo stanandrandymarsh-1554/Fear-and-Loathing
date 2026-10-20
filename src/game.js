@@ -158,6 +158,18 @@ export const SUBSTANCES = {
 
 const KEYS = Object.keys(SUBSTANCES);
 
+/* STRAINS. What the plug sells as grass is not all the same grass. A
+   strain is a grass dose with its own weight, and sometimes a little of
+   something else in it: Panama Red is racy, Thai stick is heavy and shows
+   you things. The case still holds it under GRASS (key 1); the vial says
+   which one comes out next. Grass from anywhere else is plain grass. */
+export const STRAINS = {
+  mexican:  { name: 'MEXICAN BRICK', short: 'BRICK',   mix: { grass: 0.55 } },
+  panama:   { name: 'PANAMA RED',    short: 'PANAMA',  mix: { grass: 0.85, uppers: 0.3 } },
+  acapulco: { name: 'ACAPULCO GOLD', short: 'GOLD',    mix: { grass: 1.35 } },
+  thai:     { name: 'THAI STICK',    short: 'THAI',    mix: { grass: 1.0, downers: 0.25, mescaline: 0.2 } },
+};
+
 /* ============================================================
    DIALOGUE
    ============================================================ */
@@ -1040,6 +1052,33 @@ const DIALOGUE = {
     },
   },
 
+  /* ------------------------------------------------ the plug, come to collect
+     You put your hand in his bag; now he has found you. The cost of the
+     first option is set when he arrives (Game.plugArrives): three times
+     what you tried to take. Whatever ends this without plugSquare set --
+     handing it over, running, or standing there saying nothing until the
+     clock runs out -- ends with him walking off with the case. */
+  plugVisit: {
+    start: 'v0',
+    nodes: {
+      v0: {
+        gesture: 'point',
+        who: 'THE PLUG',
+        line: 'Hey. Hey. Corner booth, the bar with the fish on the wall. You had your hand in my bag. So now I get my hand in yours.',
+        time: 10,
+        options: [
+          { text: 'Here. For your trouble.', cost: 100, effect: { pay: 100, flag: 'plugSquare' }, end: true,
+            say: 'He counts it twice, in front of you, and folds it away somewhere you will never see again.' },
+          { text: 'Touch that case and my attorney owns your car by Tuesday.',
+            req: R('nerve', 0.7), effect: { flag: 'plugSquare', fear: 0.06 }, end: true,
+            say: 'He looks at you for a long time. Then he laughs, and goes, which is somehow worse.' },
+          { text: '[hand him the briefcase]', end: true },
+          { text: '[run]', effect: { fear: 0.15 }, end: true, say: 'You get about four steps.' },
+        ],
+      },
+    },
+  },
+
   /* ------------------------------ a person who is not there */
   ghost: {
     start: 'g0',
@@ -1260,6 +1299,13 @@ export class Game {
     this.billPaid = this.billMag = this.billAtty = this.billRun = false;
     this.elapsed = 0;
     this.dosesTaken = 0;
+    // the plug: which strain each grass in the case is (null: plain grass),
+    // and whether he is coming for you
+    // (what you start with is plain grass, and comes out first)
+    this.strains = Array(this.stock.grass || 0).fill(null);
+    this.plugGrudge = null;   // { due, debt } once he has caught you stealing
+    this.plugSquare = false;  // settled with him, one way or another
+    this.plugRobbed = false;
 
     this.pulse = 0;
     this._beat = 0;
@@ -1478,7 +1524,13 @@ export class Game {
     const S = SUBSTANCES[kind];
     this.stock[kind]--;
     this.dosesTaken++;
-    this.pending[kind] += S.dose;
+    // one entry per grass in the case, oldest first; if they have ever got
+    // out of step, the spare grass is plain
+    const strain = kind === 'grass' && this.strains.length > this.stock[kind]
+      ? STRAINS[this.strains.shift()] : null;
+    if (strain) {
+      for (const k in strain.mix) this.pending[k] += SUBSTANCES[k].dose * strain.mix[k];
+    } else this.pending[kind] += S.dose;
     this.loathing = clamp(this.loathing + S.loathing);
     this.fear = clamp(this.fear - (kind === 'mescaline' ? 0.05 : 0.22));
 
@@ -1492,12 +1544,54 @@ export class Game {
     );
 
     this.audio.dose(kind);
-    this.toast(S.name, kind === 'adrenochrome' ? 'bad' : 'info');
+    this.toast(strain ? strain.name : S.name, kind === 'adrenochrome' ? 'bad' : 'info');
 
     const card = this.el.inv.querySelector(`.vial[data-k="${kind}"]`);
     if (card) { card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop'); }
 
     this._renderInv();
+  }
+
+  /* ===================================== the plug */
+  /** caught with a hand in his bag. He will find you later. */
+  plugCatches(price) {
+    this.fear = clamp(this.fear + 0.25 * (1 - this.fear * 0.5));
+    this.loathing = clamp(this.loathing + 0.04);
+    this.audio.sting();
+    const debt = Math.max(100, Math.round(price * 3 / 5) * 5);
+    // a minute and a half to three: long enough to forget about it
+    this.plugGrudge = { due: this.elapsed + 90 + Math.random() * 90, debt };
+    this.plugSquare = false;
+    this.say('His hand closes round your wrist, gently, the way you would hold a bird. '
+      + '"No," he says. "I know what room you are in." And then he is gone from the booth.', null, 6);
+  }
+
+  /** he has found you: set what he wants, and open the conversation */
+  plugArrives() {
+    const g = this.plugGrudge;
+    const opt = DIALOGUE.plugVisit.nodes.v0.options[0];
+    opt.cost = g.debt; opt.effect.pay = g.debt;
+    opt.text = `Here. For your trouble. [$${g.debt}]`;
+    this.plugSquare = false;
+    this.fear = clamp(this.fear + 0.12);
+    this.audio.sting();
+    return this.openDialogue('plugVisit');
+  }
+
+  /** the conversation is over: either it is settled or the case is his */
+  plugLeaves() {
+    this.plugGrudge = null;
+    if (this.plugSquare) return false;
+    this.plugRobbed = true;
+    for (const k of KEYS) this.stock[k] = 0;
+    this.strains = [];
+    this.loathing = clamp(this.loathing + 0.1);
+    this.audio.bad();
+    this.toast('THE PLUG TOOK THE BRIEFCASE', 'bad');
+    this.say('He takes the case by the handle, like it was always his, and walks off with '
+      + 'everything that was in it. What you already took is still yours. Nothing else is.', null, 6);
+    this._renderInv();
+    return true;
   }
 
   give(what) {
@@ -1559,10 +1653,11 @@ export class Game {
     return true;
   }
 
-  giveItem(kind) {
+  giveItem(kind, strain = null) {
     this.stock[kind] = (this.stock[kind] || 0) + 1;
+    if (kind === 'grass') this.strains.push(strain);
     this.audio.pickup();
-    this.toast('+1 ' + SUBSTANCES[kind].name, 'good');
+    this.toast('+1 ' + (STRAINS[strain]?.name || SUBSTANCES[kind].name), 'good');
     this._renderInv();
   }
 
@@ -1910,6 +2005,7 @@ export class Game {
       + `DOSES TAKEN &nbsp;${this.dosesTaken}<br>`
       + `BLACKOUTS &nbsp;${this.blackouts}<br>`
       + (this.crashes ? `WRECKS &nbsp;${this.crashes}<br>` : '')
+      + (this.plugRobbed ? 'THE PLUG TOOK YOUR BRIEFCASE<br>' : '')
       + (this.handsPlayed ? `BLACKJACK &nbsp;${this.handsPlayed} HANDS, `
         + `${this.tableNet >= 0 ? '+' : '−'}$${Math.abs(this.tableNet).toFixed(this.tableNet % 1 ? 2 : 0)}<br>` : '')
       + `FINAL LOATHING &nbsp;${Math.round(this.loathing * 100)}%<br>`
@@ -2026,6 +2122,7 @@ export class Game {
   wakeAtBar(leg) {
     this._crashing = false;
     for (const k of KEYS) { this.stock[k] = 0; this.pending[k] = 0; }
+    this.strains = [];
     this.fear = 0.3;
     this.act = 1;
     this.leaving = true;
@@ -2235,6 +2332,11 @@ export class Game {
       const d = this.el.inv.querySelector(`.vial[data-k="${k}"]`);
       d.querySelector('.ct').textContent = '×' + (this.stock[k] || 0);
       d.classList.toggle('empty', !this.stock[k]);
+      // the grass vial says which strain comes out next
+      if (k === 'grass') {
+        const next = this.strains.length >= this.stock[k] ? STRAINS[this.strains[0]] : null;
+        d.querySelector('.nm').textContent = next?.short || SUBSTANCES[k].name;
+      }
     }
   }
 

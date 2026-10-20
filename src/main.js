@@ -14,6 +14,7 @@ import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
 import { touch, initTouch, askForMotion, sampleTouch, resetTouch } from './touch.js';
 import { buildMint, MINT, PITS, MINT_SPAWN } from './mint.js';
 import { Blackjack, cash } from './blackjack.js';
+import { PlugShop } from './plug.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -471,6 +472,14 @@ const npcs = [
 ];
 npcs.forEach((n) => scene.add(n.group));
 
+// the plug, in his corner booth in the nautical bar. Not one of the four:
+// nothing in the story needs him, and he can leave the booth (plugV below)
+const PLUG_SEAT = world.lounge.plugSeat;
+const plug = new NPC({ id: 'plug', name: 'THE PLUG', x: PLUG_SEAT.x, z: PLUG_SEAT.z, ry: PLUG_SEAT.ry,
+  reach: 3.4, halo: 0.6, skin: 0x9a6a48, suit: 0x6a4424, tint: 0xb6ff2e, look: 'plug', pose: 'sit', seatY: 0.5 });
+scene.add(plug.group);
+const shop = new PlugShop(game, audio);
+
 // Act two's cast. Built now, added to the scene only when the lift lands,
 // and positioned in suite-local coordinates offset by SUITE_X.
 // y: he is IN the bath, not standing next to it -- only head and shoulders dry
@@ -635,6 +644,8 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') { e.preventDefault(); leaveTable(); return; }
     if (bj.key(e.code)) { e.preventDefault(); return; }
   }
+  // and at the plug's table, the same
+  if (shop.open && !game.dlg && shop.key(e.code)) { e.preventDefault(); return; }
 
   // 1-9 then 0, because the briefcase holds ten things
   const digit = /^Digit([0-9])$/.exec(e.code);
@@ -727,7 +738,7 @@ let hudBox = null;                     // measured once, again after a resize or
 
 function updateObjective() {
   // no hand-holding while you are being spoken to, or once it is over
-  if (game.over || game.dlg || !started || bj.seated) { objEl.classList.add('hidden'); return; }
+  if (game.over || game.dlg || !started || bj.seated || shop.open) { objEl.classList.add('hidden'); return; }
   // Only an errand in this act can have a live target: each act completes
   // its tasks as you leave it, so anything still active is nearby.
   const task = game.tasks.find((t) => {
@@ -843,6 +854,10 @@ function interact() {
     game.takeBriefcase();
   } else if (f.kind === 'table') {
     sitAtTable(f.obj);
+  } else if (f.kind === 'plug') {
+    audio.resume();
+    plug.speaking = true;
+    shop.show();
   } else if (f.kind === 'slot') {
     const res = game.gamble(5);
     if (res) {
@@ -895,7 +910,7 @@ const fwd = new THREE.Vector3();
 function findFocus() {
   if (game.dlg || game.over) { focusTarget = null; return; }
   // in the chair at the table: the table is the whole interface
-  if (bj.seated) {
+  if (bj.seated || shop.open) {
     focusTarget = null;
     game.setPrompt(null);
     document.getElementById('reticle').classList.remove('hot');
@@ -1048,6 +1063,11 @@ function findFocus() {
   const tableShut = bj.barred ? 'The pit boss has asked you to stay away from the tables.'
     : game.money < 5 ? 'You are out of money.' : null;
   world.tables.forEach((tb) => consider('table', tb, tb.seat, 2.0, 'SIT DOWN AT BLACKJACK', tableShut, 0.3));
+
+  // the plug, across his table
+  if (plugV.state === 'booth' && plug.group.visible) {
+    consider('plug', plug, plug.group.position, plug.cfg.reach, 'THE PLUG', null, 0.9);
+  }
 
   // the nautical bar: a straight counter, so the nearest point along it
   {
@@ -1406,6 +1426,113 @@ function wakeAtBar() {
 // the lounge door off the east side of the lobby, which is the way into the
 // convention wing -- the way you come back out of it on the last morning
 const LOUNGE_DOOR_AT = new THREE.Vector3(world.LOB_X - 0.6, 1.4, -44);
+
+/* ------------------------------------------------ the plug
+   In his booth he sells (src/plug.js). Catch him wrong and he leaves it,
+   and once the grudge comes due he walks up to you wherever you are on
+   foot -- never on the floor before you have been up in the lift, never
+   in the car -- and the conversation ends with him either square or
+   walking off with the case. Then he goes back to his booth: business. */
+const plugV = { state: 'booth', t: 0, act: 0, from: new THREE.Vector3(), seenAct: 0, actAt: 0 };
+const PLUG_SETTLE = 25;     // seconds in a new place before he can be there too
+shop.onCaught = (price) => {
+  game.plugCatches(price);
+  plugV.state = 'gone';
+};
+shop.onClose = () => { plug.speaking = false; };
+const _probe = new THREE.Vector3();
+/** could a person walk in a straight line from a to b */
+function clearLine(ax, az, bx, bz) {
+  const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.35));
+  for (let i = 0; i <= n; i++) {
+    const k = i / n;
+    _probe.set(ax + (bx - ax) * k, 0, az + (bz - az) * k);
+    const x0 = _probe.x, z0 = _probe.z;
+    collide(_probe);
+    if (Math.hypot(_probe.x - x0, _probe.z - z0) > 0.02) return false;
+  }
+  return true;
+}
+/** somewhere behind you, with a clear walk from there to you */
+function plugApproach(out) {
+  const px = player.pos.x, pz = player.pos.z;
+  for (const dist of [8, 6, 4.5, 3]) {
+    for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]) {
+      const a = player.yaw + off;     // behind: forward is (-sin, -cos)
+      const x = px + Math.sin(a) * dist, z = pz + Math.cos(a) * dist;
+      const ux = (px - x) / dist, uz = (pz - z) / dist;
+      if (clearLine(x, z, px - ux * 1.0, pz - uz * 1.0)) { out.set(x, 0, z); return true; }
+    }
+  }
+  return false;
+}
+function plugCanCome() {
+  if (!started || game.over || game.dlg || fade || winning || mintOn || game._blacking > 0) return false;
+  if (bj.seated || shop.open || seminar.seated || game.lecture) return false;
+  if (game.act === 3) return false;                       // on the road he waits
+  if (game.act === 1 && !game.leaving) return false;      // and not before the lift
+  if (car.stage !== null && car.stage !== undefined) return false;
+  return true;
+}
+function plugToBooth() {
+  plug.pose = 'sit'; plug.turns = false;
+  plug.group.position.set(PLUG_SEAT.x, 0, PLUG_SEAT.z);
+  plug.group.rotation.y = plug.homeYaw = PLUG_SEAT.ry;
+  plugV.state = 'booth';
+}
+function updatePlug(dt, s2) {
+  const V = plugV;
+  V.t += dt;
+  // he does not step out of the lift behind you: give each place a moment
+  const where = game.act * 10 + (game.leaving ? 1 : 0);
+  if (where !== V.seenAct) { V.seenAct = where; V.actAt = game.elapsed; }
+  if (V.state === 'booth') {
+    plug.group.visible = world.root.visible && !mintOn;
+  } else if (V.state === 'gone') {
+    plug.group.visible = false;
+    const g = game.plugGrudge;
+    if (!g) { plugToBooth(); return; }
+    if (game.elapsed < g.due || game.elapsed - V.actAt < PLUG_SETTLE
+      || !plugCanCome() || !plugApproach(V.from)) return;
+    plug.pose = 'stand'; plug.turns = false;
+    plug.group.position.copy(V.from);
+    plug.group.visible = true;
+    V.state = 'coming'; V.t = 0; V.act = game.act;
+  } else if (V.state === 'coming') {
+    // anything that takes you somewhere else calls it off for now
+    if (game.act !== V.act || fade || winning || mintOn || seminar.seated || bj.seated) {
+      plug.group.visible = false; V.state = 'gone'; return;
+    }
+    const P = plug.group.position;
+    const d = Math.hypot(player.pos.x - P.x, player.pos.z - P.z);
+    if (d < 1.5 && !game.dlg) {
+      // he has you: you turn round to the voice
+      player.yaw = Math.atan2(-(P.x - player.pos.x), -(P.z - player.pos.z));
+      player.lookLag.set(0, 0);
+      player.vel.set(0, 0, 0);
+      plug.turns = true; plug.homeYaw = plug.group.rotation.y;
+      game.plugArrives();
+      V.state = 'talk'; V.t = 0;
+      return;
+    }
+    // you ran: he is suddenly closer than he should be
+    if (V.t > 25 && plugApproach(V.from)) { P.copy(V.from); V.t = 0; }
+    _probe.set(player.pos.x, 0, player.pos.z);
+    walkTo(plug.group, _probe, d > 9 ? 2.6 : 1.7, dt);
+  } else if (V.state === 'talk') {
+    if (game.dlg) return;
+    // however it ended: settled, or he is walking off with it
+    game.plugLeaves();
+    plug.turns = false;
+    V.state = 'leaving'; V.t = 0;
+  } else if (V.state === 'leaving') {
+    if (walkTo(plug.group, V.from, 1.5, dt) || V.t > 12 || game.act !== V.act) {
+      plug.group.visible = false;
+      plugToBooth();
+    }
+  }
+  if (plug.group.visible) plug.update(clock, s2, player.pos, focusTarget?.obj === plug);
+}
 
 /* Onto the middle stool at a blackjack table. You can look round the pit,
    and take whatever is in the case, but the chair does not go anywhere. */
@@ -1833,7 +1960,7 @@ function phoneInput() {
     player.lookLag.y += t.dragY * 0.004;
   }
   // a conversation, a cut to black or a chair: the legs are not yours
-  const still = !!game.dlg || driving || !!fade || !!winning || seminar.seated || bj.seated || game.over;
+  const still = !!game.dlg || driving || !!fade || !!winning || seminar.seated || bj.seated || shop.open || game.over;
   phone.walk = still ? 0 : t.walk;
   phone.strafe = still ? 0 : t.strafe;
   phone.run = !still && t.run;
@@ -1864,6 +1991,8 @@ initTouch({
     if (!started || game.over) return;
     const chip = target.closest('[data-bj]');
     if (chip) { bj.action(chip.dataset.bj); return; }
+    const ware = target.closest('[data-pl]');
+    if (ware) { shop.action(ware.dataset.pl); return; }
     const opt = target.closest('.dlg-options li');
     if (opt) { game.choose([...opt.parentNode.children].indexOf(opt)); return; }
     const vial = target.closest('.vial');
@@ -1873,7 +2002,7 @@ initTouch({
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
     // in the car the buttons are all there is
     if (game.dlg || document.documentElement.classList.contains('driving')) return;
-    if (bj.seated) return;
+    if (bj.seated || shop.open) return;
     interact();
   },
 });
@@ -2339,7 +2468,7 @@ function movePlayer(dt, s) {
   // ---- walk ------------------------------------------------
   let ix = 0, iz = 0;
   // no walking through a cut to black, or out of a closing lift
-  if (!fade && !winning && !seminar.seated && !bj.seated) {
+  if (!fade && !winning && !seminar.seated && !bj.seated && !shop.open) {
     if (keys.KeyW || keys.ArrowUp) iz -= 1;
     if (keys.KeyS || keys.ArrowDown) iz += 1;
     if (keys.KeyA || keys.ArrowLeft) ix -= 1;
@@ -2574,9 +2703,9 @@ const DLG_SPEAKER = {
   clerk: () => npcs[0], bill: () => npcs[0], dealer: () => npcs[1], attorney: () => npcs[2],
   security: () => npcs[3], valet: () => npcs[4], gonzo: () => gonzo, maid: () => maid,
   registrar: () => registrar, lecturer: () => keynote, georgia: () => georgiaDA, chp: () => patrolman,
-  gonzo4: () => gonzoC, gonzo5: () => gonzoC,
+  gonzo4: () => gonzoC, gonzo5: () => gonzoC, plugVisit: () => plug,
 };
-const EVERYONE = [...npcs, gonzo, maid, ...convCast, carGonzo, patrolman];
+const EVERYONE = [...npcs, gonzo, maid, ...convCast, carGonzo, patrolman, plug];
 let lastDlg = null, talkNode = null, talkT = 0, talkFor = 0;
 function updateSpeakers() {
   EVERYONE.forEach((n) => { n.speaking = false; n.listening = false; });
@@ -2856,6 +2985,7 @@ function tick(dt, draw = true) {
   // a blackout takes you out of the chair, and your bet stays on the felt
   if (bj.seated && (game._blacking > 0 || game.over)) { bj.forfeit(); standFromTable(); }
   bj.update(dt);
+  updatePlug(dt, s2);
   findFocus();
   updateObjective();
   audio.update(s2, dt);
@@ -2917,6 +3047,9 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       if (c.clear) { for (const k in game.subs) game.subs[k] = 0; game.flash = 0; }
       if (c.set) { for (const k in c.set) game.subs[k] = c.set[k]; }
       if (c.dose) game.take(c.dose);
+      // the plug: his grudge comes due now, and/or the next steal always fails
+      if (c.plugNow && game.plugGrudge) game.plugGrudge.due = 0;
+      if (c.money !== undefined) { game.money = c.money; game._paintHUD(); }
       if (c.act2 && game.act === 1) startActTwo();
       if (c.dlg) document.body.dataset.flDlg = String(game.openDialogue(c.dlg));
       if (c.choose !== undefined) game.choose(c.choose);
