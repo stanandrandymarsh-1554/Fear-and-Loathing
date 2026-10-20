@@ -87,6 +87,9 @@ const LOOKS = {
   registrar: { hair: 'long', hairCol: 0x6a4422, shirt: 0xf4efe4, tie: null, skirt: true, energy: 0.8, width: 0.9 },
   georgia: { width: 1.25, belly: 1.25, hair: 'bald', hairCol: 0xd8d4cc, shirt: 0xf2eee4, tie: 0x8a1a1a, glasses: true, energy: 1.2 },
   keynote: { hair: 'bald', hairCol: 0x8a8278, glasses: true, shirt: 0xf2eee4, tie: 0x2a3a6a, energy: 1.3 },
+  // the plug: shades indoors at night, a suede jacket over a loud shirt, gold at the neck
+  plug: { width: 1.05, hair: 'curly', hairCol: 0x120c08, shades: true, stache: true,
+    shirt: 'loud', open: true, chain: true, jacket: 0x6a4424, trousers: 0x1a1612, energy: 1.1 },
   patrol: { width: 1.08, hair: 'short', hairCol: 0x4a3018, hat: 'patrol', hatCol: 0x2a2a2a, shades: true,
     jacket: 0xb8a878, shirt: null, trousers: 0x2a2a30, belt: true, energy: 0.9 },
 };

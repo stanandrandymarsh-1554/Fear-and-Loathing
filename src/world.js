@@ -811,6 +811,9 @@ function buildLounge(scene, box, mat, spots, LOB_X, DOOR) {
   }
 
   // booths along the far walls: a high back, two ends and a table
+  // (one of them, against the north wall, is where the plug does business:
+  // he sits in the middle of the seat, facing the room)
+  const PLUG_BOOTH = { x: 27.4, z: Z1 - 1.3 + 0.55 };
   const boothMat = mat({ color: 0x5a1020, roughness: 0.7 });
   const tableMat = mat({ color: 0x241008, roughness: 0.3, metalness: 0.2 });
   [[23.2, Z0 + 1.3, 1], [27.4, Z0 + 1.3, 1], [23.2, Z1 - 1.3, -1], [27.4, Z1 - 1.3, -1]].forEach(([x, z, f]) => {
@@ -833,6 +836,8 @@ function buildLounge(scene, box, mat, spots, LOB_X, DOOR) {
     scene.add(leg);
     // the back sits 1.15 behind the seat line and the table 0.85 in front
     box(x, z - f * 0.1, 1.5, 1.05);
+    // the north-east booth is the plug's, and he does not share it
+    if (x === PLUG_BOOTH.x && f < 0) return;
     spots.fixed.push({ kind: 'sit', x: x - 0.55, z: z - f * 0.55, ry: f > 0 ? 0 : Math.PI },
                      { kind: 'sit', x: x + 0.6, z: z - f * 0.55, ry: f > 0 ? 0 : Math.PI });
   });
@@ -957,6 +962,9 @@ function buildLounge(scene, box, mat, spots, LOB_X, DOOR) {
 
   return {
     X0, X1, Z0, Z1, BX, BZ0, BZ1,
+    plugSeat: { x: PLUG_BOOTH.x, z: PLUG_BOOTH.z, ry: Math.PI },
+    // where you stand to deal with him: the open floor in front of his table
+    plugFront: { x: PLUG_BOOTH.x, z: PLUG_BOOTH.z - 2.3 },
     update(t, s) {
       // the sea behind the glass moves only if you are seeing things
       floats.forEach((o) => { o.f.position.y = o.y + Math.sin(t * 1.3 + o.ph) * 0.08 * s.psych; });
