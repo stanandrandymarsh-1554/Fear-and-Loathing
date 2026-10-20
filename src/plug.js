@@ -23,10 +23,10 @@ import { SUBSTANCES, STRAINS } from './game.js';
 import { cash } from './blackjack.js';
 
 const MENU = [
-  { strain: 'mexican', price: 10, blurb: 'Pressed flat in a trunk in Nogales. Seeds, stems and a headache. Half a dose.' },
-  { strain: 'panama', price: 25, blurb: 'Talks fast and laughs at its own jokes. There is some speed in it.' },
-  { strain: 'acapulco', price: 35, blurb: 'The real thing, which is the problem. Strong.' },
-  { strain: 'thai', price: 50, blurb: 'Tied to bamboo with silk thread. Heavy, slow, and it shows you things.' },
+  { strain: 'mexican', price: 10, blurb: 'Commercial Mexican, pressed into a brick for the trip north. Seeds, stems, harsh smoke, a weak foggy high.' },
+  { strain: 'panama', price: 25, blurb: 'Panama Red, for the red hairs on the buds. A sativa: racy, heady, talks fast.' },
+  { strain: 'acapulco', price: 35, blurb: 'Acapulco Gold, out of Guerrero. The top shelf: bright, euphoric, and strong. Smooth smoke.' },
+  { strain: 'thai', price: 50, blurb: 'Thai stick: buds tied to bamboo with silk, said to be cured in hash oil. Very strong and cerebral. Easy to overdo.' },
   { kind: 'mescaline', price: 60, blurb: 'Buttons. You will see through things and talk like a radio between stations.' },
   { kind: 'acid', price: 80, blurb: 'Blotter, with a little cartoon on it. You will see everything, including what is not there.' },
   { kind: 'cocaine', price: 90, blurb: 'For saying the thing you came to say.' },

@@ -395,6 +395,55 @@ export class Audio {
     setTimeout(() => this._blip(1320, 0.12, 'sine', 0.08), 70);
   }
 
+  /* --------------------------------------------- the joint (src/joint.js) */
+  /** a lighter: the wheel, then the flame catching */
+  lighter() {
+    if (!this.ctx) return;
+    this._burst(5200, 0.03, 3, 0.09, 'bandpass');
+    setTimeout(() => this._burst(4000, 0.025, 3, 0.06, 'bandpass'), 70);
+    setTimeout(() => this._burst(700, 0.5, 0.6, 0.035, 'lowpass'), 140);
+  }
+
+  /** drawing on it: paper and leaf crackling, for as long as you pull */
+  inhale(on) {
+    if (!this.ctx) return;
+    clearInterval(this._crackle);
+    this._crackle = null;
+    if (!on) return;
+    this._burst(1800, 0.35, 0.7, 0.03, 'bandpass');
+    this._crackle = setInterval(() => {
+      if (Math.random() < 0.7) this._burst(rnd(2500, 6000), rnd(0.01, 0.025), 6, rnd(0.02, 0.06), 'bandpass', rnd(-0.1, 0.1));
+      if (Math.random() < 0.3) this._burst(1400, 0.18, 0.6, 0.02, 'bandpass');
+    }, 55);
+  }
+
+  /** a long breath out */
+  exhale() {
+    if (!this.ctx) return;
+    this._burst(900, 1.3, 0.5, 0.05, 'lowpass');
+  }
+
+  /** the cough: four or five barks, each a little weaker */
+  cough() {
+    if (!this.ctx) return;
+    const n = 4 + ((Math.random() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        this._burst(rnd(380, 520), 0.16, 1.4, 0.16 * (1 - i / (n + 2)), 'bandpass');
+        this._burst(1400, 0.08, 1, 0.05 * (1 - i / (n + 2)), 'bandpass');
+      }, i * rnd(230, 330));
+    }
+  }
+
+  /** the giggles: short breaths through the nose */
+  giggle() {
+    if (!this.ctx) return;
+    const n = 5 + ((Math.random() * 4) | 0);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => this._burst(rnd(800, 1100), 0.07, 2.5, 0.05, 'bandpass'), i * rnd(120, 160));
+    }
+  }
+
   /** a card off the shoe and onto the felt */
   card() {
     if (!this.ctx) return;
