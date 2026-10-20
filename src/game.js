@@ -56,14 +56,22 @@ const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
    audio gets no drone — only the room you are standing in.
    ============================================================ */
 export const SUBSTANCES = {
-  // mild perceptual lift, time dilation, short-term memory slipping.
-  // Not a hallucinogen: nothing melts, you just lose the thread.
+  // Smoked, so it comes on within a couple of minutes of the first hits
+  // and builds while you keep going. Relaxing at a little, and only
+  // anxious at a lot: the paranoia is on a curve (see curve below), which
+  // is how it actually goes -- anxiety and panic are high-dose effects.
+  // Slower reactions, short-term memory and attention slipping, a faster
+  // heart, a dry mouth and the munchies (Game._weed). Not a hallucinogen:
+  // nothing melts, you just lose the thread. A joint is smoked a hit at a
+  // time (src/joint.js), and the strain decides how strong and how harsh.
   grass: {
     name: 'GRASS', glyph: '❦', key: '1', color: '#6fbf4a', price: 25,
-    dose: 0.70, decay: 0.0120, loathing: 0.02,
+    dose: 0.70, decay: 0.0080, loathing: 0.02,
     fx: { psych: 0.16, blur: 0.26, dim: 0.06 },
     stat: { fearOff: 0.50, perception: 0.20, composure: -0.30,
-            motorLoss: 0.18, slowClock: 0.5, paranoia: 0.85 },
+            motorLoss: 0.18, slowClock: 0.5, paranoia: 1.1 },
+    // per stat, [from, to]: the stat only arrives as the level crosses this band
+    curve: { paranoia: [0.5, 0.95] },
   },
 
   // the classic: geometry, colour, surfaces breathing, a long ride.
@@ -158,17 +166,28 @@ export const SUBSTANCES = {
 
 const KEYS = Object.keys(SUBSTANCES);
 
-/* STRAINS. What the plug sells as grass is not all the same grass. A
-   strain is a grass dose with its own weight, and sometimes a little of
-   something else in it: Panama Red is racy, Thai stick is heavy and shows
-   you things. The case still holds it under GRASS (key 1); the vial says
-   which one comes out next. Grass from anywhere else is plain grass. */
+/* STRAINS. The grass in the case is kept by strain, and you pick which
+   one to roll (src/joint.js). What the period's names meant, as near as
+   anyone can say -- these are reputations, not lab results:
+     plain     whatever was going around: ordinary commercial weed
+     mexican   commercial Mexican, pressed into bricks for the trip north:
+               seeds and stems, harsh smoke, a weak, foggy high
+     panama    Panama Red, a sativa named for the red hairs on the buds:
+               racy and heady
+     acapulco  Acapulco Gold, Guerrero sativa, the top shelf of the
+               sixties: bright, euphoric, strong
+     thai      Thai stick: buds bound to a bamboo stick, said to be cured
+               with hash oil. Very strong and cerebral, easy to overdo
+   potency scales the dose a whole joint gives; harsh is how much it makes
+   you cough; mix is what else rides along, per unit of grass. */
 export const STRAINS = {
-  mexican:  { name: 'MEXICAN BRICK', short: 'BRICK',   mix: { grass: 0.55 } },
-  panama:   { name: 'PANAMA RED',    short: 'PANAMA',  mix: { grass: 0.85, uppers: 0.3 } },
-  acapulco: { name: 'ACAPULCO GOLD', short: 'GOLD',    mix: { grass: 1.35 } },
-  thai:     { name: 'THAI STICK',    short: 'THAI',    mix: { grass: 1.0, downers: 0.25, mescaline: 0.2 } },
+  plain:    { name: 'GRASS',         short: 'GRASS',  potency: 0.80, harsh: 1.0,  mix: {} },
+  mexican:  { name: 'MEXICAN BRICK', short: 'BRICK',  potency: 0.50, harsh: 1.7,  mix: {} },
+  panama:   { name: 'PANAMA RED',    short: 'PANAMA', potency: 0.95, harsh: 1.0,  mix: { uppers: 0.2, mescaline: 0.08 } },
+  acapulco: { name: 'ACAPULCO GOLD', short: 'GOLD',   potency: 1.25, harsh: 0.8,  mix: { uppers: 0.08 } },
+  thai:     { name: 'THAI STICK',    short: 'THAI',   potency: 1.60, harsh: 1.15, mix: { mescaline: 0.18 } },
 };
+export const STRAIN_KEYS = Object.keys(STRAINS);
 
 /* ============================================================
    DIALOGUE
@@ -1301,8 +1320,15 @@ export class Game {
     this.dosesTaken = 0;
     // the plug: which strain each grass in the case is (null: plain grass),
     // and whether he is coming for you
-    // (what you start with is plain grass, and comes out first)
-    this.strains = Array(this.stock.grass || 0).fill(null);
+    // the grass, by strain: stock.grass is always the total of this
+    this.bag = Object.fromEntries(STRAIN_KEYS.map((k) => [k, 0]));
+    this.bag.plain = this.stock.grass || 0;
+    this.roach = null;        // { strain, left }: a joint you put out to finish later
+    this.grassTol = 0;        // tolerance: each joint takes the edge off the next
+    this.thirsty = false;     // cottonmouth, until you drink something
+    this.forgot = 0;          // seconds the itinerary is gone from your head
+    this._weedT = 20;         // until the next thing the grass does to you
+    this._smokedAt = -999;    // when you last took a hit
     this.plugGrudge = null;   // { due, debt } once he has caught you stealing
     this.plugSquare = false;  // settled with him, one way or another
     this.plugRobbed = false;
@@ -1336,7 +1362,10 @@ export class Game {
     let n = 0;
     for (const k of KEYS) {
       const lvl = this.subs[k];
-      if (lvl > 0) n += lvl * (SUBSTANCES[k][group][field] || 0);
+      if (!(lvl > 0)) continue;
+      const c = group === 'stat' && SUBSTANCES[k].curve?.[field];
+      const w = c ? clamp((lvl - c[0]) / (c[1] - c[0])) : 1;
+      n += lvl * w * (SUBSTANCES[k][group][field] || 0);
     }
     return n;
   }
@@ -1426,7 +1455,11 @@ export class Game {
         this.pending[k] -= rise;
         this.subs[k] = clamp(this.subs[k] + rise);
       }
-      this.subs[k] = Math.max(0, this.subs[k] - SUBSTANCES[k].decay * dt);
+      // smoked grass builds while you smoke and holds for a while after the
+      // last hit before it starts down (peak a quarter of an hour after,
+      // in life): barely any decline until 30 seconds after the last hit
+      const hold = k === 'grass' && this.elapsed - this._smokedAt < 30 ? 0.15 : 1;
+      this.subs[k] = Math.max(0, this.subs[k] - SUBSTANCES[k].decay * hold * dt);
     }
 
     const chem = this.fearOff;
@@ -1459,9 +1492,11 @@ export class Game {
     dL += 0.006 * this.subs.adrenochrome + 0.004 * this.subs.cocaine;
     dL += 0.012 * Math.max(0, this.fear - 0.7); // and panic sours
     this.loathing = clamp(this.loathing + dL * dt);
+    this._weed(dt);
 
     // ---- heartbeat pulse for the shaders ---------------------
-    const rate = 0.85 + this.fear * 2.1 + this.fx.rush * 2.2;
+    // grass speeds the heart up too, by a lot at a high dose
+    const rate = 0.85 + this.fear * 2.1 + this.fx.rush * 2.2 + this.subs.grass * 0.7;
     this._beat += dt * rate;
     if (this._beat >= 1) { this._beat -= 1; this.pulse = 1; }
     this.pulse *= Math.pow(0.0008, dt);
@@ -1526,11 +1561,16 @@ export class Game {
     this.dosesTaken++;
     // one entry per grass in the case, oldest first; if they have ever got
     // out of step, the spare grass is plain
-    const strain = kind === 'grass' && this.strains.length > this.stock[kind]
-      ? STRAINS[this.strains.shift()] : null;
-    if (strain) {
-      for (const k in strain.mix) this.pending[k] += SUBSTANCES[k].dose * strain.mix[k];
+    // (a whole joint at once: the dev channel's dose command. In play,
+    // grass is rolled and smoked a hit at a time: lightJoint / smokeHit)
+    let strain = null;
+    if (kind === 'grass') {
+      const sk = STRAIN_KEYS.find((k) => this.bag[k] > 0) || 'plain';
+      this.bag[sk] = Math.max(0, this.bag[sk] - 1);
+      strain = STRAINS[sk];
+      this._dose('grass', strain.potency, strain);
     } else this.pending[kind] += S.dose;
+    if (kind === 'tequila') this.thirsty = false;
     this.loathing = clamp(this.loathing + S.loathing);
     this.fear = clamp(this.fear - (kind === 'mescaline' ? 0.05 : 0.22));
 
@@ -1550,6 +1590,108 @@ export class Game {
     if (card) { card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop'); }
 
     this._renderInv();
+  }
+
+  /* ===================================== grass, a hit at a time */
+  /** the strains you could roll, plus the roach if you have one */
+  rollable() {
+    const out = [];
+    if (this.roach) out.push({ roach: true, strain: this.roach.strain, left: this.roach.left });
+    for (const k of STRAIN_KEYS) if (this.bag[k] > 0) out.push({ strain: k, n: this.bag[k] });
+    return out;
+  }
+
+  /** take a joint of this strain out of the case (or the roach back out) */
+  lightJoint(choice) {
+    if (this.over || this._blacking > 0) return null;
+    if (choice.roach) {
+      const r = this.roach;
+      this.roach = null;
+      this._renderInv();
+      return { strain: r.strain, left: r.left };
+    }
+    if (!(this.bag[choice.strain] > 0)) { this.audio.deny(); return null; }
+    this.bag[choice.strain]--;
+    this.stock.grass = Math.max(0, this.stock.grass - 1);
+    this.dosesTaken++;
+    this.loathing = clamp(this.loathing + SUBSTANCES.grass.loathing);
+    this._renderInv();
+    return { strain: choice.strain, left: 1 };
+  }
+
+  /** put it out and keep it */
+  pocketRoach(strain, left) {
+    if (left < 0.08) return;   // that is not a roach, that is ash
+    this.roach = { strain, left };
+    this._renderInv();
+  }
+
+  /** one hit: amount is the fraction of a whole joint's dose that got in */
+  smokeHit(strain, amount) {
+    const S = STRAINS[strain];
+    const got = this._dose('grass', S.potency * amount, S);
+    this.fear = clamp(this.fear - 0.05 * amount * 4);
+    this._smokedAt = this.elapsed;
+    // tolerance builds with use, and takes the top off the next one
+    this.grassTol = Math.min(0.45, this.grassTol + 0.07 * amount);
+    return got;
+  }
+
+  _dose(kind, amount, strain) {
+    const d = SUBSTANCES[kind].dose * amount * (1 - this.grassTol);
+    this.pending[kind] += d;
+    if (strain) for (const k in strain.mix) this.pending[k] += SUBSTANCES[k].dose * strain.mix[k] * amount;
+    return d;
+  }
+
+  /* What grass does besides the stats, while you are on it: the things
+     everybody who has smoked would recognise. One every 20-40 seconds,
+     chosen from what fits the dose and how long since the last hit. */
+  _weed(dt) {
+    this.grassTol = Math.max(0, this.grassTol - 0.0006 * dt);
+    if (this.forgot > 0) this.forgot -= dt;
+    const lvl = this.subs.grass;
+    if (lvl < 0.22 || this.dlg || this._blacking > 0) return;
+    this._weedT -= dt;
+    if (this._weedT > 0) return;
+    this._weedT = 20 + Math.random() * 20;
+    const since = this.elapsed - this._smokedAt;
+    const pick = [];
+    // memory: the list you were working from is simply gone for a while
+    if (lvl > 0.4) pick.push('forget');
+    // the dry mouth comes early and stays until you drink something
+    if (!this.thirsty && since > 15) pick.push('thirst');
+    // the munchies come later, on the way down
+    if (since > 50) pick.push('hungry', 'hungry');
+    // a lot of it, and the heart and the room become a problem
+    if (lvl > 0.75 && this.paranoia > 0.6) pick.push('anxious', 'anxious');
+    // a little, and everything is funny and sounds good
+    if (lvl < 0.8) pick.push('giggle', 'senses');
+    const what = pick[(Math.random() * pick.length) | 0];
+    if (what === 'forget') {
+      this.forgot = 9;
+      this.say(['Hang on. What were you doing? There was a list. There was definitely a list.',
+        'You have walked over here for a reason, and the reason has gone on ahead without you.',
+        'You were in the middle of something. You are sure of that, and of nothing else.'][(Math.random() * 3) | 0], null, 5);
+    } else if (what === 'thirst') {
+      this.thirsty = true;
+      this.say('Your tongue is a strip of carpet. Your lips stick to your teeth. You need a drink of anything.', null, 5);
+    } else if (what === 'hungry') {
+      this.say(['You could eat. You could eat a great deal. You could eat the nuts in the bowl at the desk, bowl included.',
+        'Somewhere in this building there is a kitchen, and you can feel exactly where it is.'][(Math.random() * 2) | 0], null, 5);
+    } else if (what === 'anxious') {
+      this.fear = clamp(this.fear + 0.08);
+      this.audio.sting();
+      this.say(['Your heart is going like a drum, and everyone in here can hear it. They are being polite about it.',
+        'Too much. You took too much. Breathe. Nobody is looking at you. Everybody is looking at you.'][(Math.random() * 2) | 0], null, 5);
+    } else if (what === 'giggle') {
+      this.audio.giggle?.();
+      this.say(['Something about the carpet is unbearably funny. You manage not to say what.',
+        'The word "casino" has just started to sound ridiculous, and you cannot make it stop.'][(Math.random() * 2) | 0], null, 4.5);
+    } else if (what === 'senses') {
+      this.say(['The music has layers you never noticed. Somebody should tell the band how good they are.',
+        'The light off the slot machines is the most beautiful thing you have seen all year.'][(Math.random() * 2) | 0], null, 4.5);
+    }
   }
 
   /* ===================================== the plug */
@@ -1584,7 +1726,8 @@ export class Game {
     if (this.plugSquare) return false;
     this.plugRobbed = true;
     for (const k of KEYS) this.stock[k] = 0;
-    this.strains = [];
+    for (const k of STRAIN_KEYS) this.bag[k] = 0;
+    this.roach = null;
     this.loathing = clamp(this.loathing + 0.1);
     this.audio.bad();
     this.toast('THE PLUG TOOK THE BRIEFCASE', 'bad');
@@ -1649,15 +1792,16 @@ export class Game {
     this.money -= S.price;
     this.giveItem(kind);
     this.drinksBought++;
+    this.thirsty = false;
     this._paintHUD();
     return true;
   }
 
   giveItem(kind, strain = null) {
     this.stock[kind] = (this.stock[kind] || 0) + 1;
-    if (kind === 'grass') this.strains.push(strain);
+    if (kind === 'grass') this.bag[strain || 'plain']++;
     this.audio.pickup();
-    this.toast('+1 ' + (STRAINS[strain]?.name || SUBSTANCES[kind].name), 'good');
+    this.toast('+1 ' + (strain ? STRAINS[strain].name : SUBSTANCES[kind].name), 'good');
     this._renderInv();
   }
 
@@ -2122,7 +2266,8 @@ export class Game {
   wakeAtBar(leg) {
     this._crashing = false;
     for (const k of KEYS) { this.stock[k] = 0; this.pending[k] = 0; }
-    this.strains = [];
+    for (const k of STRAIN_KEYS) this.bag[k] = 0;
+    this.roach = null;
     this.fear = 0.3;
     this.act = 1;
     this.leaving = true;
@@ -2332,10 +2477,10 @@ export class Game {
       const d = this.el.inv.querySelector(`.vial[data-k="${k}"]`);
       d.querySelector('.ct').textContent = '×' + (this.stock[k] || 0);
       d.classList.toggle('empty', !this.stock[k]);
-      // the grass vial says which strain comes out next
+      // the grass vial: a half-smoked joint counts too, so you can find it
       if (k === 'grass') {
-        const next = this.strains.length >= this.stock[k] ? STRAINS[this.strains[0]] : null;
-        d.querySelector('.nm').textContent = next?.short || SUBSTANCES[k].name;
+        d.querySelector('.ct').textContent = '×' + (this.stock[k] || 0) + (this.roach ? '+½' : '');
+        d.classList.toggle('empty', !this.stock[k] && !this.roach);
       }
     }
   }

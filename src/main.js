@@ -10,11 +10,12 @@ import { buildConvention, CONV } from './convention.js';
 import { NPC, Hallucination, Briefcase, Pickup, BatSwarm, Crowd } from './npc.js';
 import { Post } from './post.js';
 import { Audio } from './audio.js';
-import { Game, SUBSTANCES, STORY_COMPOSURE } from './game.js';
+import { Game, SUBSTANCES, STORY_COMPOSURE, STRAINS } from './game.js';
 import { touch, initTouch, askForMotion, sampleTouch, resetTouch } from './touch.js';
 import { buildMint, MINT, PITS, MINT_SPAWN } from './mint.js';
 import { Blackjack, cash } from './blackjack.js';
 import { PlugShop } from './plug.js';
+import { Joint } from './joint.js';
 
 // defaults match game.js: a one-argument call here returned NaN, which is
 // how running the car off the road froze the whole game
@@ -480,6 +481,72 @@ const plug = new NPC({ id: 'plug', name: 'THE PLUG', x: PLUG_SEAT.x, z: PLUG_SEA
 scene.add(plug.group);
 const shop = new PlugShop(game, audio);
 
+/* ------------------------------------------------ grass, rolled and smoked
+   1 opens the bag: pick a strain (or the roach), and it is lit in your
+   hand. Then HOLD 1 to draw on it, let go to hold it in, tap 1 to breathe
+   out, X to put it out. On a phone: the vial, then HIT and PUT IT OUT. */
+const joint = new Joint(scene, camera, game, audio);
+joint.onCough = () => { player.lookLag.y -= 0.06; player.lookLag.x += (Math.random() - 0.5) * 0.05; };
+const strainsEl = document.getElementById('strains');
+const jointHud = document.getElementById('joint-hud');
+let picking = null;      // the choices on offer while the bag is open
+function openBag() {
+  if (joint.active || game.over || game._blacking > 0) return;
+  const opts = game.rollable();
+  if (!opts.length) { audio.deny(); game.toast('NO GRASS', 'bad'); return; }
+  if (opts.length === 1) { joint.start(opts[0]); return; }
+  picking = opts;
+  const BLURB = {
+    plain: 'ordinary commercial weed', mexican: 'weak and harsh; seeds and stems',
+    panama: 'racy, heady sativa', acapulco: 'bright, strong, smooth', thai: 'very strong and cerebral',
+  };
+  strainsEl.innerHTML = '<div class="st-title">ROLL ONE</div>'
+    + opts.map((o, i) => `<div class="st-row" data-st="${i}"><kbd>${i + 1}</kbd>`
+      + `<span class="st-name">${o.roach ? 'THE ROACH' : STRAINS[o.strain].name}`
+      + `<small>${o.roach ? `${STRAINS[o.strain].name.toLowerCase()}, ${Math.round(o.left * 100)}% left` : BLURB[o.strain]}</small></span>`
+      + `<span class="st-ct">${o.roach ? '' : '×' + o.n}</span></div>`).join('')
+    + '<div class="st-hint">X — never mind</div>';
+  strainsEl.classList.remove('hidden');
+}
+function pickStrain(i) {
+  const o = picking?.[i];
+  closeBag();
+  if (o) joint.start(o);
+}
+function closeBag() { picking = null; strainsEl.classList.add('hidden'); }
+strainsEl.addEventListener('click', (e) => { const r = e.target.closest('[data-st]'); if (r) pickStrain(+r.dataset.st); });
+// the phone's HIT is held, not tapped, so it has its own fingers
+{
+  const hit = document.getElementById('jh-hit');
+  const down = (e) => { e.preventDefault(); e.stopPropagation(); hit.classList.add('on'); joint.beginDraw(); };
+  const up = (e) => { e.preventDefault(); e.stopPropagation(); hit.classList.remove('on'); joint.endDraw(); };
+  hit.addEventListener('touchstart', down, { passive: false });
+  hit.addEventListener('touchend', up, { passive: false });
+  hit.addEventListener('touchcancel', up, { passive: false });
+  const out = document.getElementById('jh-out');
+  out.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); joint.putOut(); }, { passive: false });
+}
+function updateJoint(dt) {
+  // nothing in your hands through a blackout, a cut to black or the end
+  if (joint.active && (game._blacking > 0 || game.over || fade || winning)) joint.stow();
+  if (picking && (game.dlg || game.over)) closeBag();
+  // spoken to with a lungful: you breathe out to answer
+  if (joint.holding && game.dlg) joint.exhale();
+  if (joint.drawing && game.dlg) joint.endDraw();
+  joint.update(dt, clock);
+  jointHud.classList.toggle('hidden', !joint.active);
+  if (joint.active) {
+    jointHud.querySelector('.jh-name').textContent = STRAINS[joint.strain].name;
+    jointHud.querySelector('.jh-state').textContent = joint.lightT > 0 ? 'LIGHTING'
+      : !joint.lit ? 'GONE OUT' : joint.coughT > 0 ? 'COUGHING'
+        : joint.drawing ? 'DRAWING' : joint.holding ? `HOLDING IT IN ${Math.floor(joint.holdT)}s` : '';
+    jointHud.querySelector('.jh-left i').style.width = Math.max(0, joint.left * 100).toFixed(0) + '%';
+    jointHud.querySelector('.jh-puff i').style.width = (joint.puff * 100).toFixed(0) + '%';
+  }
+  // the grass has taken the list out of your head
+  document.getElementById('tasks').classList.toggle('forgot', game.forgot > 0);
+}
+
 // Act two's cast. Built now, added to the scene only when the lift lands,
 // and positioned in suite-local coordinates offset by SUITE_X.
 // y: he is IN the bath, not standing next to it -- only head and shoulders dry
@@ -653,8 +720,22 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     const d = +digit[1];
     if (game.dlg) { if (d >= 1 && d <= 4) game.choose(d - 1); return; }
+    // the bag is open: the number is which one to roll
+    if (picking) { if (d >= 1) pickStrain(d - 1); return; }
     const slot = d === 0 ? 9 : d - 1;
-    game.take(Object.keys(SUBSTANCES)[slot]);
+    const kind = Object.keys(SUBSTANCES)[slot];
+    // grass is smoked, not swallowed: 1 opens the bag, or draws on the one you have
+    if (kind === 'grass') {
+      if (e.repeat) return;
+      if (joint.active) joint.beginDraw(); else openBag();
+      return;
+    }
+    game.take(kind);
+    return;
+  }
+
+  if (e.code === 'KeyX') {
+    if (picking) closeBag(); else if (joint.active) joint.putOut();
     return;
   }
 
@@ -663,7 +744,10 @@ addEventListener('keydown', (e) => {
     interact();
   }
 });
-addEventListener('keyup', (e) => { keys[e.code] = false; });
+addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+  if (e.code === 'Digit1') joint.endDraw();
+});
 
 canvas.addEventListener('click', () => {
   if (started) grabMouse();
@@ -738,7 +822,7 @@ let hudBox = null;                     // measured once, again after a resize or
 
 function updateObjective() {
   // no hand-holding while you are being spoken to, or once it is over
-  if (game.over || game.dlg || !started || bj.seated || shop.open) { objEl.classList.add('hidden'); return; }
+  if (game.over || game.dlg || !started || bj.seated || shop.open || game.forgot > 0) { objEl.classList.add('hidden'); return; }
   // Only an errand in this act can have a live target: each act completes
   // its tasks as you leave it, so anything still active is nearby.
   const task = game.tasks.find((t) => {
@@ -1996,7 +2080,14 @@ initTouch({
     const opt = target.closest('.dlg-options li');
     if (opt) { game.choose([...opt.parentNode.children].indexOf(opt)); return; }
     const vial = target.closest('.vial');
-    if (vial) { game.take(vial.dataset.k); document.body.classList.remove('case-open'); return; }
+    if (vial) {
+      document.body.classList.remove('case-open');
+      if (vial.dataset.k === 'grass') { if (!joint.active) openBag(); return; }
+      game.take(vial.dataset.k);
+      return;
+    }
+    const st = target.closest('[data-st]');
+    if (st) { pickStrain(+st.dataset.st); return; }
     if (target.closest('#case-btn')) { document.body.classList.toggle('case-open'); return; }
     if (target.closest('#tasks')) { document.getElementById('tasks').classList.toggle('dim'); return; }
     if (document.body.classList.contains('case-open')) { document.body.classList.remove('case-open'); return; }
@@ -2986,6 +3077,7 @@ function tick(dt, draw = true) {
   if (bj.seated && (game._blacking > 0 || game.over)) { bj.forfeit(); standFromTable(); }
   bj.update(dt);
   updatePlug(dt, s2);
+  updateJoint(dt);
   findFocus();
   updateObjective();
   audio.update(s2, dt);
@@ -3034,6 +3126,8 @@ if (document.documentElement.hasAttribute('data-fl-debug')) {
       road: game.act === 3 ? [+latOf(car.pos.x, car.pos.z).toFixed(2), +relHeading(car.heading, car.pos.z).toFixed(3),
         +(-(car.pos.z - DESERT_Z)).toFixed(0)] : null,
       traffic: traffic.filter((V) => V.active).map((V) => Math.round(V.s + (car.pos.z - DESERT_Z))),
+      joint: [joint.active, joint.hits, joint.coughs || 0, +joint.left.toFixed(2), +joint.puff.toFixed(2)],
+      para: +game.paranoia.toFixed(2), tol: +game.grassTol.toFixed(3),
       subs: Object.fromEntries(Object.entries(game.subs)
         .filter(([, v]) => v > 0.001).map(([k, v]) => [k, +v.toFixed(3)]))
       });
