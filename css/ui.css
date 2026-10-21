@@ -947,7 +947,7 @@ html.touch .pl-row, html.touch .pl-row button{ pointer-events:auto; }
 /* top centre on a desk: the bottom of the screen is the case and the meters */
 #joint-hud{
   position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:7;
-  width:min(300px, 60vw); pointer-events:none;
+  width:min(400px, 60vw); pointer-events:none;
   font-family:var(--font-type); color:#efe3c2; text-shadow:0 1px 3px #000;
 }
 #joint-hud.hidden{ display:none; }
