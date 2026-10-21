@@ -4,15 +4,15 @@
    Grass used to be a key press and a dose. Now it is rolled from the
    strain you choose, lit, and smoked the way people actually do it:
 
-     HOLD 1      draw on it. The ember brightens and crackles, and how
+     HOLD CLICK  (or 1) draw on it. The ember brightens and crackles, and how
                  long you draw is how much smoke you take: in the
                  controlled studies, puff volume is what drives the high.
-     let go      you are holding it in. Tap 1 to breathe out -- or hold
+     let go      you are holding it in. Click (or tap 1) to breathe out -- or hold
                  it until you cannot. Holding it in adds next to nothing
                  to the high (the same studies: a little more THC in the
                  blood, no difference to how high people felt), but it
                  does make you cough.
-     X           pinch it out and keep the roach for later.
+     RIGHT-CLICK (or X) pinch it out and keep the roach for later.
 
    A joint is about a dozen good hits, burns down a little on its own,
    and goes out if you leave it too long. Every hit is absorbed at once
@@ -256,7 +256,7 @@ export class Joint {
         }
         if (this.idleT > GOES_OUT && !this.holding) {
           this.lit = false;
-          this.game.say('It has gone out. Hold 1 to light it again.', null, 3);
+          this.game.say('It has gone out. Click to light it again.', null, 3);
         }
       }
       if (this.holding) {

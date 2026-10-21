@@ -752,6 +752,30 @@ addEventListener('keyup', (e) => {
 canvas.addEventListener('click', () => {
   if (started) grabMouse();
 });
+// With a joint in your hand the mouse is the hand: hold the left button to
+// draw on it, let go to hold it in, click again to breathe out, right
+// button to put it out. (1 and X do the same.) The first click, the one
+// that only takes the mouse, does nothing else.
+let emptyHand = 0;
+addEventListener('mousedown', (e) => {
+  if (!started || game.over) return;
+  if (!pointerLocked && !lockUnavailable) return;
+  if (!joint.active) {
+    // holding the button down with nothing in your hand: say how to get something there
+    if (e.button === 0 && !game.dlg && game.rollable().length) {
+      clearTimeout(emptyHand);
+      emptyHand = setTimeout(() => game.say('Nothing in your hand. Press 1 to roll a joint, then hold the button to smoke it.', null, 4), 600);
+    }
+    return;
+  }
+  if (e.button === 0) joint.beginDraw();
+  else if (e.button === 2) joint.putOut();
+});
+addEventListener('mouseup', (e) => {
+  clearTimeout(emptyHand);
+  if (e.button === 0) joint.endDraw();
+});
+addEventListener('contextmenu', (e) => { if (joint.active) e.preventDefault(); });
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === canvas;
   document.body.classList.toggle('pointer', !pointerLocked);
