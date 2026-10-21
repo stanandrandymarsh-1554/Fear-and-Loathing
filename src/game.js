@@ -67,7 +67,10 @@ export const SUBSTANCES = {
   grass: {
     name: 'GRASS', glyph: '❦', key: '1', color: '#6fbf4a', price: 25,
     dose: 0.70, decay: 0.0080, loathing: 0.02,
-    fx: { psych: 0.16, blur: 0.26, dim: 0.06 },
+    // What people report seeing is the room getting MORE vivid -- colour,
+    // light, music -- not hazier. It used to blur and dim the picture,
+    // which is ether's look, not grass's. A trace of drift, and the colour.
+    fx: { psych: 0.06, blur: 0.08, vivid: 1.0 },
     stat: { fearOff: 0.50, perception: 0.20, composure: -0.30,
             motorLoss: 0.18, slowClock: 0.5, paranoia: 1.1 },
     // per stat, [from, to]: the stat only arrives as the level crosses this band
@@ -1378,6 +1381,8 @@ export class Game {
       blur: clamp(this._sum('fx', 'blur'), 0, 1.2),
       dim: clamp(this._sum('fx', 'dim'), 0, 1.1),
       monster: clamp(this._sum('fx', 'monster')),
+      // colour, contrast and the lights all a notch richer (grass)
+      vivid: clamp(this._sum('fx', 'vivid'), 0, 1.2),
     };
   }
 
@@ -1416,7 +1421,7 @@ export class Game {
     return {
       fear: this.fear,
       loathing: this.loathing,
-      psych: f.psych, rush: f.rush, blur: f.blur, dim: f.dim, monster: f.monster,
+      psych: f.psych, rush: f.rush, blur: f.blur, dim: f.dim, monster: f.monster, vivid: f.vivid,
       wreck: this.wreck,
       nerve: this.nerve,
       perception: this.perception,

@@ -65,7 +65,12 @@ export class Audio {
     muffle.type = 'lowpass';
     muffle.frequency.value = 18000;
     muffle.Q.value = 0.9;
-    muffle.connect(drive);
+    // grass: the music gets more vivid too -- air on top, warmth underneath
+    const air = (this.air = ctx.createBiquadFilter());
+    air.type = 'highshelf'; air.frequency.value = 5200; air.gain.value = 0;
+    const warm = (this.warm = ctx.createBiquadFilter());
+    warm.type = 'lowshelf'; warm.frequency.value = 180; warm.gain.value = 0;
+    muffle.connect(air); air.connect(warm); warm.connect(drive);
 
     // tilt: as loathing climbs we scoop the mids and boost lows
     const tilt = (this.tilt = ctx.createBiquadFilter());
@@ -729,6 +734,8 @@ export class Audio {
     const cut = 20000 * Math.pow(1 - muffled * 0.97, 2.6) + 300;
     this.muffle.frequency.setTargetAtTime(cut, now, 0.35);
     this.muffle.Q.setTargetAtTime(0.9 + s.dim * 6, now, 0.4);
+    this.air.gain.setTargetAtTime(5 * (s.vivid || 0), now, 0.6);
+    this.warm.gain.setTargetAtTime(3 * (s.vivid || 0), now, 0.6);
 
     // stimulants tilt it bright and hard; loathing scoops it out
     this.tilt.gain.setTargetAtTime(-14 * loathing + 6 * s.rush, now, 0.5);

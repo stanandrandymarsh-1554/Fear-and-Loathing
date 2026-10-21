@@ -127,6 +127,7 @@ uniform float uPulse;     // heartbeat spike 0..1
 uniform float uFlash;     // white blast
 uniform float uBlackout;  // 1 = normal, 0 = gone
 uniform float uBloom;
+uniform float uVivid;     // grass: everything a notch more vivid
 
 ${GLSL_LIB}
 
@@ -296,6 +297,28 @@ void main(){
   l = luma(col);
   col = mix(vec3(l), col, 1.0 + 0.55*uPsych + 0.16*uRush);
 
+  /* grass: nothing moves, it is just all MORE. Colour pushed up (most
+     on what is already coloured, so faces do not go orange), a little
+     more contrast and local clarity, and the lights glow richer. Done in
+     perceptual terms: the frame is still linear light here, and a
+     contrast pivot in linear terms sent the whole dark carpet to black.
+     The music gets the same treatment in audio.js. */
+  if (uVivid > 0.01){
+    vec3 p = sqrt(max(col, 0.0));
+    float lp = luma(p);
+    float chroma = max(p.r, max(p.g, p.b)) - min(p.r, min(p.g, p.b));
+    p = mix(vec3(lp), p, 1.0 + uVivid * (0.30 + 0.45 * smoothstep(0.04, 0.35, chroma)));
+    p = (p - 0.33) * (1.0 + 0.12 * uVivid) + 0.33;
+    // clarity: what stands out from its neighbours stands out further
+    vec3 here = sqrt(texture2D(tDiffuse, uv).rgb);
+    vec3 near = (sqrt(texture2D(tDiffuse, uv + vec2(2.0/1280.0, 0.0)).rgb) + sqrt(texture2D(tDiffuse, uv - vec2(2.0/1280.0, 0.0)).rgb)
+               + sqrt(texture2D(tDiffuse, uv + vec2(0.0, 2.0/720.0)).rgb) + sqrt(texture2D(tDiffuse, uv - vec2(0.0, 2.0/720.0)).rgb)) * 0.25;
+    p += (here - near) * 0.45 * uVivid;
+    p = max(p, 0.0);
+    col = p * p;
+    col += texture2D(tBloom, uv).rgb * 0.3 * uVivid;
+  }
+
   /* ---- tunnel vision. Fear closes it, the depressants push the
          room away, the stimulants narrow the focus. At baseline
          there is NO vignette at all.                          ---- */
@@ -399,7 +422,7 @@ export class Post {
         uPsych: { value: 0 }, uBlur: { value: 0 }, uMonster: { value: 0 },
         uFear: { value: 0 }, uLoath: { value: 0 },
         uPulse: { value: 0 }, uFlash: { value: 0 },
-        uBlackout: { value: 1 }, uBloom: { value: 0.9 },
+        uBlackout: { value: 1 }, uBloom: { value: 0.9 }, uVivid: { value: 0 },
       },
     });
   }
@@ -530,6 +553,7 @@ export class Post {
     u.uFlash.value = s.flash;
     u.uBlackout.value = s.blackout;
     u.uBloom.value = 0.55 + 0.80 * mydriasis - 0.22 * s.dim;
+    u.uVivid.value = s.vivid || 0;
     this._blit(this.mFinal, null);
 
     // swap
