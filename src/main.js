@@ -3007,6 +3007,7 @@ function tick(dt, draw = true) {
   const s2 = game.snapshot();
   updateSpeakers();
 
+  audio.musicSong = null;    // (the floor sets it again below, every frame it is there)
   if (game.act === 1) {
     // the bar he works behind is turning. He does not turn with it any more.
     world.update(clock, s2, player.pos);
@@ -3026,6 +3027,10 @@ function tick(dt, draw = true) {
     // the lounge there is only quiet music
     audio.ambience = player.pos.z < F.PAVE_Z ? 'street'
       : player.pos.x > world.lounge.X0 ? 'lounge' : 'casino';
+    // the carousel's band carries across the floor; the lounge has its own
+    audio.musicSong = audio.ambience === 'lounge' ? 'lounge' : audio.ambience === 'casino' ? 'waltz' : null;
+    audio.musicNear = audio.ambience === 'lounge' ? 0.85
+      : clamp(1 - (Math.hypot(player.pos.x, player.pos.z) - 7) / 26, 0, 1);
   } else if (game.act === 2 && mintOn) {
     updateMint(dt, s2);
   } else if (game.act === 2) {
