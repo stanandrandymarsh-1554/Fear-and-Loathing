@@ -18,6 +18,72 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 // how running the car off the road froze the whole game
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 
+/* ------------------------------------------------ the bands' books
+   Note names to frequencies, the two tunes, and how each plays a beat. */
+const NOTE = (n) => {
+  const m = /^([A-G])(#|b)?(\d)$/.exec(n);
+  const semi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+  return 440 * Math.pow(2, (semi + (+m[3] - 4) * 12 - 9) / 12);
+};
+const CALLIOPE = { atk: 0.02, vib: 0.006, parts: [[1, 0.6], [2, 0.22], [3, 0.08]] };
+const PAH = { atk: 0.01, decay: 0.5, parts: [[1, 0.35, 'triangle'], [2, 0.08]] };
+const TUBA = { atk: 0.02, decay: 0.7, parts: [[1, 0.7, 'triangle'], [2, 0.12]] };
+const KEYS = { atk: 0.006, decay: 1.6, parts: [[1, 0.55], [2, 0.12], [4.02, 0.05]] };
+const UPRIGHT = { atk: 0.01, decay: 0.9, parts: [[1, 0.8], [2, 0.18, 'triangle']] };
+const chordOf = (root, kind) => {
+  const r = NOTE(root);
+  const iv = { maj: [0, 4, 7], dom7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10] }[kind];
+  return iv.map((x) => r * Math.pow(2, x / 12));
+};
+// the carousel waltz: sixteen bars of 3/4 in C, then round again
+const WALTZ_CHORDS = ['C3 maj', 'C3 maj', 'G2 dom7', 'G2 dom7', 'G2 dom7', 'G2 dom7', 'C3 maj', 'C3 maj',
+  'C3 maj', 'C3 dom7', 'F2 maj', 'F2 maj', 'C3 maj', 'G2 dom7', 'C3 maj', 'C3 maj'];
+const WALTZ_TUNE = [   // [note, beats] per bar
+  [['E5', 2], ['G5', 1]], [['G5', 2], ['E5', 1]], [['D5', 2], ['F5', 1]], [['F5', 3]],
+  [['D5', 2], ['F5', 1]], [['F5', 2], ['D5', 1]], [['C5', 2], ['E5', 1]], [['E5', 3]],
+  [['E5', 2], ['G5', 1]], [['C6', 2], ['Bb5', 1]], [['A5', 2], ['F5', 1]], [['A5', 3]],
+  [['G5', 2], ['E5', 1]], [['D5', 2], ['B4', 1]], [['C5', 3]], [],
+];
+// the lounge: a slow ii-V-I, four bars round and round
+const LOUNGE_CHORDS = ['C3 maj7', 'A2 m7', 'D3 m7', 'G2 dom7'];
+const LOUNGE_TUNE = [
+  [['E5', 1], ['G5', 1], ['B5', 2]], [['A5', 1], ['G5', 1], ['E5', 2]],
+  [['F5', 1], ['A5', 1], ['C6', 1], ['A5', 1]], [['G5', 2], ['F5', 1], ['D5', 1]],
+];
+function playTune(a, tune, bar, beatInBar, at, beat, out, voice, vol, bend) {
+  let b = 0;
+  for (const [n, len] of tune[bar % tune.length]) {
+    if (b === beatInBar) a._note(out, NOTE(n) * bend, at, len * beat * 0.95, voice, vol);
+    b += len;
+  }
+}
+const SONGS = {
+  waltz: {
+    bpm: 138,
+    play(a, step, at, beat, out, bend) {
+      const bar = Math.floor(step / 3) % 16, k = step % 3;
+      const [root, kind] = WALTZ_CHORDS[bar].split(' ');
+      const ch = chordOf(root, kind);
+      if (k === 0) a._note(out, ch[0] * bend, at, beat * 0.9, TUBA, 0.5);
+      else ch.slice(1, 3).forEach((f) => a._note(out, f * 2 * bend, at, beat * 0.5, PAH, 0.16));
+      playTune(a, WALTZ_TUNE, bar, k, at, beat, out, CALLIOPE, 0.22, bend);
+    },
+  },
+  lounge: {
+    bpm: 76,
+    play(a, step, at, beat, out, bend) {
+      const bar = Math.floor(step / 4) % 4, k = step % 4;
+      const [root, kind] = LOUNGE_CHORDS[bar].split(' ');
+      const ch = chordOf(root, kind);
+      // the bass walks: root, fifth, root, a step toward the next bar
+      const walk = [ch[0], ch[2] / 2, ch[0], ch[0] * Math.pow(2, 2 / 12)];
+      a._note(out, walk[k] * bend, at, beat * 0.9, UPRIGHT, 0.45);
+      if (k === 0 || k === 2) ch.forEach((f) => a._note(out, f * 2 * bend, at + 0.02, beat * 1.8, KEYS, 0.09));
+      playTune(a, LOUNGE_TUNE, bar, k, at, beat, out, KEYS, 0.2, bend);
+    },
+  },
+};
+
 export class Audio {
   constructor() {
     this.ready = false;
@@ -84,7 +150,7 @@ export class Audio {
 
     // ---- reverb -------------------------------------------
     const rev = (this.rev = ctx.createConvolver());
-    rev.buffer = this._impulse(3.4, 2.6);
+    rev.buffer = this._impulse(2.6, 3.2);
     const revGain = (this.revGain = ctx.createGain());
     revGain.gain.value = 0.42;
     rev.connect(revGain);
@@ -190,12 +256,17 @@ export class Audio {
     const ctx = this.ctx;
     const len = Math.floor(ctx.sampleRate * seconds);
     const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    // a big soft room: noise under an exponential tail that gets darker as
+    // it goes (a one-pole lowpass closing down), with no flutter in it --
+    // the old one was modulated, and every voice came back metallic
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
+      let lp = 0;
       for (let i = 0; i < len; i++) {
         const t = i / len;
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) *
-               (1 - 0.35 * Math.sin(t * 40 + ch));
+        const k = 0.85 - 0.75 * t;
+        lp += ((Math.random() * 2 - 1) - lp) * k;
+        d[i] = lp * Math.pow(1 - t, decay) * (i < 200 ? i / 200 : 1);
       }
     }
     return buf;
@@ -249,13 +320,15 @@ export class Audio {
     src.buffer = this.noiseBuf;
     src.loop = true;
 
+    // the building breathing: air handling, low and steady. (It was band-
+    // passed at 520Hz, which is a hiss, which is wind, which is a horror film.)
     const bp = (this.roomBP = ctx.createBiquadFilter());
-    bp.type = 'bandpass';
-    bp.frequency.value = 520;
-    bp.Q.value = 0.6;
+    bp.type = 'lowpass';
+    bp.frequency.value = 260;
+    bp.Q.value = 0.5;
 
     const g = (this.roomGain = ctx.createGain());
-    g.gain.value = 0.055;
+    g.gain.value = 0.028;
 
     src.connect(bp); bp.connect(g); g.connect(this.bus);
     const s = ctx.createGain(); s.gain.value = 0.7; g.connect(s); s.connect(this.send);
@@ -737,14 +810,16 @@ export class Audio {
     this.air.gain.setTargetAtTime(5 * (s.vivid || 0), now, 0.6);
     this.warm.gain.setTargetAtTime(3 * (s.vivid || 0), now, 0.6);
 
-    // stimulants tilt it bright and hard; loathing scoops it out
-    this.tilt.gain.setTargetAtTime(-14 * loathing + 6 * s.rush, now, 0.5);
+    // stimulants tilt it bright and hard; loathing scoops it out -- but
+    // only once there is real loathing. A little of it is a normal night.
+    const sour = Math.max(0, (loathing - 0.35) / 0.65);
+    this.tilt.gain.setTargetAtTime(-14 * sour + 6 * s.rush, now, 0.5);
 
     // dissociation puts you at the wrong end of a hall
     this.revGain.gain.setTargetAtTime(
       0.12 + 0.95 * s.dim + 0.35 * s.psych, now, 0.6);
 
-    const driveAmt = loathing * 0.85 + s.monster * 0.5 + s.rush * 0.15;
+    const driveAmt = sour * 0.85 + s.monster * 0.5 + s.rush * 0.15;
     if (Math.abs(driveAmt - (this._lastDrive ?? -1)) > 0.05) {
       this.drive.curve = this._curve(driveAmt);
       this._lastDrive = driveAmt;
@@ -763,11 +838,11 @@ export class Audio {
     this.droneLFOAmt.gain.setTargetAtTime(90 + 520 * s.psych, now, 0.5);
     this.droneGain.gain.setTargetAtTime(
       0.26 * s.psych + 0.22 * s.dim + 0.30 * s.monster
-      + 0.16 * Math.max(0, fear - 0.45) + 0.10 * loathing, now, 0.8);
+      + 0.16 * Math.max(0, fear - 0.45) + 0.10 * sour, now, 0.8);
 
     // the room itself stays the room
-    this.roomBP.frequency.setTargetAtTime(520 - 260 * muffled, now, 0.6);
-    this.roomGain.gain.setTargetAtTime(0.055 + 0.07 * fear, now, 0.6);  // room tone is the room, not a symptom
+    this.roomBP.frequency.setTargetAtTime(260 - 120 * muffled, now, 0.6);
+    this.roomGain.gain.setTargetAtTime(0.028 + 0.05 * fear, now, 0.6);  // room tone is the room, not a symptom
 
     const T = now;
 
@@ -778,30 +853,20 @@ export class Audio {
     const murmur = casino || this.ambience === 'convention';
     if (!casino) { this._blipAt = this._coinAt = T + 0.5; }
     if (!murmur) this._chatAt = T + 0.5;
+    // electromechanical slots, the 1971 kind: a lever, three reels
+    // whirring, three clunks, and now and then the coins or the bell
     if (T > this._blipAt) {
-      this._blipAt = T + rnd(0.1, 0.55) / (0.35 + near);
-      const scale = [262, 294, 330, 392, 440, 523, 587, 659];
-      const f = scale[(Math.random() * scale.length) | 0] *
-                (Math.random() < 0.4 ? 2 : 1) *
-                (1 - wreck * 0.28);
-      this._blip(f, rnd(0.05, 0.18), Math.random() < 0.5 ? 'square' : 'triangle',
-                 0.045 * (0.3 + near), rnd(-0.9, 0.9));
+      this._blipAt = T + rnd(1.2, 4.5) / (0.3 + near);
+      this._slotPull(rnd(-0.9, 0.9), 0.5 * (0.3 + near), wreck);
     }
-
-    if (T > this._coinAt) {
-      this._coinAt = T + rnd(2.5, 9) / (0.3 + near);
-      const n = 6 + ((Math.random() * 16) | 0);
-      const pan = rnd(-0.9, 0.9);
-      for (let i = 0; i < n; i++) {
-        setTimeout(() => this._burst(rnd(2200, 6500), 0.05, 10,
-                   0.05 * (0.3 + near), 'bandpass', pan), i * rnd(25, 70));
-      }
+    // the crowd: a bed of people talking, not a stream of syllables
+    this._crowd(murmur ? (0.25 + 0.75 * near) * (1 + fear * 0.5) : 0, now);
+    if (murmur && T > this._chatAt) {
+      this._chatAt = T + rnd(6, 16) / (0.3 + near);
+      if (Math.random() < 0.6) this._laugh(rnd(-0.9, 0.9), 0.03 * (0.3 + near));
     }
-
-    if (T > this._chatAt) {
-      this._chatAt = T + rnd(0.7, 3.2) / (0.25 + near);
-      this._mutter(rnd(-1, 1), 0.035 * (0.3 + near) * (1 + fear));
-    }
+    // and the music: the carousel's band out on the floor, soft keys in the lounge
+    this._music(now, s);
 
     // ---- heartbeat ----------------------------------------
     // the heart is the stimulant's signature, and amyls are all heart
@@ -822,6 +887,211 @@ export class Audio {
     if (s.moving && T > this._stepAt) {
       this._stepAt = T + (0.52 / Math.max(0.35, s.speed)) * (1 + (1 - s.motor) * 0.6);
       this.step(Math.min(1.2, s.speed));
+    }
+  }
+
+  /* ================================================ the casino, sober
+     What the floor actually sounds like, before anything is wrong with you.
+     The machines are electromechanical, as they were in 1971: no beeps. */
+
+  /** a short metallic or wooden knock: noise through a narrow band */
+  _knock(freq, dur, vol, pan, q = 6, at = 0) {
+    const ctx = this.ctx, t = ctx.currentTime + at;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    src.connect(f); f.connect(g); g.connect(p); p.connect(this.bus);
+    const sd = ctx.createGain(); sd.gain.value = 0.3; p.connect(sd); sd.connect(this.send);
+    src.start(t, rnd(0, 3)); src.stop(t + dur + 0.05);
+  }
+
+  /** a struck metal partial: coins, bells */
+  _ping(freq, dur, vol, pan, at = 0) {
+    const ctx = this.ctx, t = ctx.currentTime + at;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    o.connect(g); g.connect(p); p.connect(this.bus);
+    const sd = ctx.createGain(); sd.gain.value = 0.35; p.connect(sd); sd.connect(this.send);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  /** somebody somewhere pulls a handle */
+  _slotPull(pan, vol, wreck = 0) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    // the handle: a clack and the ratchet coming back up
+    this._knock(1600, 0.05, vol * 0.5, pan, 4);
+    for (let i = 0; i < 5; i++) this._knock(2600, 0.02, vol * 0.18, pan, 8, 0.05 + i * 0.045);
+    // the reels: a whirr with the teeth ticking in it
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900 * (1 - wreck * 0.3); bp.Q.value = 1.4;
+    const g = ctx.createGain();
+    const spin = 1.0 + Math.random() * 0.5;
+    g.gain.setValueAtTime(0, t + 0.25);
+    g.gain.linearRampToValueAtTime(vol * 0.22, t + 0.35);
+    g.gain.setValueAtTime(vol * 0.22, t + 0.25 + spin);
+    g.gain.linearRampToValueAtTime(0, t + 0.6 + spin);
+    const trem = ctx.createOscillator(); trem.frequency.value = 26;
+    const tg = ctx.createGain(); tg.gain.value = vol * 0.12;
+    trem.connect(tg); tg.connect(g.gain);
+    const p = ctx.createStereoPanner(); p.pan.value = pan;
+    src.connect(bp); bp.connect(g); g.connect(p); p.connect(this.bus);
+    src.start(t + 0.25, rnd(0, 3)); src.stop(t + 0.7 + spin);
+    trem.start(t + 0.25); trem.stop(t + 0.7 + spin);
+    // three reels stopping, one after another
+    for (let r = 0; r < 3; r++) {
+      const at = 0.25 + spin * (0.55 + r * 0.22);
+      this._knock(240, 0.09, vol * 0.55, pan, 2, at);
+      this._knock(1900, 0.025, vol * 0.25, pan, 6, at);
+    }
+    const end = 0.3 + spin;
+    const roll = Math.random();
+    if (roll < 0.015) this._bell(pan, vol * 0.6, end);          // a jackpot: the bell
+    else if (roll < 0.14) this._coins(pan, vol, end);           // a small one: coins in the tray
+  }
+
+  /** coins dropping into a steel tray */
+  _coins(pan, vol, at = 0) {
+    const n = 6 + ((Math.random() * 14) | 0);
+    let when = at;
+    for (let i = 0; i < n; i++) {
+      when += rnd(0.035, 0.08);
+      this._ping(rnd(2800, 4200), 0.12, vol * 0.1, pan, when);
+      this._ping(rnd(5600, 7400), 0.06, vol * 0.05, pan, when);
+      this._knock(5000, 0.015, vol * 0.08, pan, 3, when);
+    }
+  }
+
+  /** the jackpot bell: an electric bell ringing for a couple of seconds */
+  _bell(pan, vol, at = 0) {
+    for (let i = 0; i < 26; i++) {
+      const w = at + i * 0.075;
+      this._ping(1180, 0.16, vol * 0.16, pan, w);
+      this._ping(1180 * 2.76, 0.1, vol * 0.06, pan, w);
+      this._ping(1180 * 5.4, 0.05, vol * 0.03, pan, w);
+    }
+    this._coins(pan, vol * 1.3, at + 0.4);
+  }
+
+  /** the crowd: five people talking at once, somewhere out on the floor.
+      Shaped noise through two vowel formants, with a level that moves the
+      way speech does -- phrases and pauses -- rather than a chopped tone. */
+  _crowd(level, now) {
+    const ctx = this.ctx;
+    if (!this._talkers) {
+      const bus = (this._crowdBus = ctx.createGain());
+      bus.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+      bus.connect(lp); lp.connect(this.bus);
+      const sd = ctx.createGain(); sd.gain.value = 0.45; lp.connect(sd); sd.connect(this.send);
+      this._talkers = [];
+      for (let i = 0; i < 6; i++) {
+        const src = ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+        const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 2.2;
+        const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 3.0;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const p = ctx.createStereoPanner(); p.pan.value = rnd(-0.85, 0.85);
+        src.connect(f1); src.connect(f2); f1.connect(g); f2.connect(g); g.connect(p); p.connect(bus);
+        src.start(0, rnd(0, 3.9));
+        // a voice: lower or higher, and its own pace
+        const low = Math.random() < 0.5;
+        this._talkers.push({ f1, f2, g, low, next: 0, talking: Math.random() < 0.6, until: now + rnd(1, 4) });
+      }
+    }
+    this._crowdBus.gain.setTargetAtTime(level * 0.55, now, 0.8);
+    if (level <= 0.001) return;
+    for (const v of this._talkers) {
+      if (now > v.until) { v.talking = !v.talking; v.until = now + (v.talking ? rnd(1.5, 5) : rnd(0.5, 2.5)); }
+      if (now < v.next) continue;
+      // syllables: four to six a second, each a vowel of its own
+      v.next = now + rnd(0.13, 0.26);
+      const amp = v.talking ? Math.pow(Math.random(), 1.5) * 0.5 : 0;
+      v.g.gain.setTargetAtTime(amp, now, 0.04);
+      v.f1.frequency.setTargetAtTime((v.low ? 420 : 560) + rnd(0, 320), now, 0.03);
+      v.f2.frequency.setTargetAtTime((v.low ? 1050 : 1350) + rnd(0, 900), now, 0.03);
+    }
+  }
+
+  /** a laugh from across the room */
+  _laugh(pan, vol) {
+    const n = 3 + ((Math.random() * 4) | 0);
+    const f = rnd(550, 900);
+    for (let i = 0; i < n; i++) {
+      const at = i * rnd(0.14, 0.2);
+      this._knock(f * (1 - i * 0.03), 0.11, vol * (1 - i * 0.1), pan, 3, at);
+      this._knock(f * 2.2, 0.08, vol * 0.4 * (1 - i * 0.1), pan, 4, at);
+    }
+  }
+
+  /* ---------------------------------------------- the music
+     Two small bands, both original tunes and both far enough off to be
+     background: on the floor, the carousel's band -- a waltz on something
+     like a calliope, oom-pah-pah under it -- getting louder as you get
+     near the bar; in the lounge, soft keys and a bass over a ii-V. main.js
+     says which, and how close (musicSong, musicNear). The drugs do to it
+     what they do to everything else, because it goes through the same bus. */
+  _music(now, s) {
+    const ctx = this.ctx;
+    if (!this._mus) {
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000; lp.Q.value = 0.5;
+      g.connect(lp); lp.connect(this.bus);
+      const sd = ctx.createGain(); sd.gain.value = 0.5; lp.connect(sd); sd.connect(this.send);
+      this._mus = { g, lp, song: null, step: 0, at: 0 };
+    }
+    const M = this._mus;
+    const song = SONGS[this.musicSong] || null;
+    const near = song ? Math.max(0, Math.min(1, this.musicNear ?? 0)) : 0;
+    M.g.gain.setTargetAtTime(song ? 0.05 + 0.13 * near : 0, now, 0.8);
+    // further off is duller as well as quieter
+    M.lp.frequency.setTargetAtTime(900 + 3200 * near, now, 0.8);
+    if (!song) { M.song = null; return; }
+    if (M.song !== this.musicSong) { M.song = this.musicSong; M.step = 0; M.at = now + 0.1; }
+    // schedule a little ahead, one beat at a time
+    const beat = 60 / song.bpm;
+    // ether and downers slow the band down; the stimulants do not speed it up
+    const drag = 1 + 0.25 * (s.dim || 0);
+    // the hallucinogens pull it off pitch, a little
+    const bend = 1 + 0.03 * Math.sin(now * 0.7) * (s.psych || 0);
+    // after a stall (a hidden tab, a long frame) pick the tune up from now
+    // rather than firing every missed beat at once
+    if (M.at < now - 0.5) M.at = now + 0.05;
+    while (M.at < now + 0.6) {
+      song.play(this, M.step, M.at, beat * drag, M.g, bend);
+      M.step++;
+      M.at += beat * drag;
+    }
+  }
+
+  /** one note of the band: a voice is a recipe of partials and an envelope */
+  _note(out, freq, at, dur, voice, vol) {
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(vol, at + voice.atk);
+    if (voice.decay) g.gain.exponentialRampToValueAtTime(vol * 0.0005 + 0.00001, at + dur * voice.decay + voice.atk);
+    else { g.gain.setValueAtTime(vol, at + Math.max(voice.atk, dur - 0.06)); g.gain.linearRampToValueAtTime(0, at + dur); }
+    g.connect(out);
+    for (const [mul, amp, type] of voice.parts) {
+      const o = ctx.createOscillator();
+      o.type = type || 'sine';
+      o.frequency.value = freq * mul;
+      if (voice.vib) {
+        const l = ctx.createOscillator(); l.frequency.value = 5.6;
+        const la = ctx.createGain(); la.gain.value = freq * mul * voice.vib;
+        l.connect(la); la.connect(o.frequency); l.start(at); l.stop(at + dur + 0.1);
+      }
+      const og = ctx.createGain(); og.gain.value = amp;
+      o.connect(og); og.connect(g);
+      o.start(at); o.stop(at + dur + 0.1);
     }
   }
 
